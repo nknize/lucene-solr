@@ -14,7 +14,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.lucene.geo;
+package org.apache.lucene.geo.geometry;
+
+import org.apache.lucene.geo.GeoUtils;
 
 import static java.lang.Math.PI;
 import static java.lang.Math.max;
@@ -178,10 +180,10 @@ public class Rectangle {
     double maxLon = Double.NEGATIVE_INFINITY;
 
     for (int i = 0;i < polygons.length; i++) {
-      minLat = Math.min(polygons[i].minLat, minLat);
-      maxLat = Math.max(polygons[i].maxLat, maxLat);
-      minLon = Math.min(polygons[i].minLon, minLon);
-      maxLon = Math.max(polygons[i].maxLon, maxLon);
+      minLat = min(polygons[i].minLat, minLat);
+      maxLat = max(polygons[i].maxLat, maxLat);
+      minLon = min(polygons[i].minLon, minLon);
+      maxLon = max(polygons[i].maxLon, maxLon);
     }
 
     return new Rectangle(minLat, maxLat, minLon, maxLon);

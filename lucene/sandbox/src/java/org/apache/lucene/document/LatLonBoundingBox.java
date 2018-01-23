@@ -16,6 +16,9 @@
  */
 package org.apache.lucene.document;
 
+import org.apache.lucene.analysis.Analyzer;
+import org.apache.lucene.analysis.TokenStream;
+import org.apache.lucene.index.IndexOptions;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.NumericUtils;
@@ -72,6 +75,9 @@ public class LatLonBoundingBox extends Field {
   static FieldType getType(int geoDimensions) {
     FieldType ft = new FieldType();
     ft.setDimensions(geoDimensions*2, BYTES);
+    ft.setIndexOptions(IndexOptions.DOCS);
+    //ft.setStoreTermVectors(true);
+    ft.setStoreTermVectorPositions(true);
     ft.freeze();
     return ft;
   }
@@ -194,6 +200,23 @@ public class LatLonBoundingBox extends Field {
     }
     NumericUtils.intToSortableBytes(encodeLatitude(lat), result, offset);
     NumericUtils.intToSortableBytes(encodeLongitude(lon), result, offset + BYTES);
+  }
+
+  @Override
+  public TokenStream tokenStream(Analyzer analyzer, TokenStream reuse) {
+    if (fieldType().indexOptions() == IndexOptions.NONE) {
+      // not indexed
+      return null;
+    }
+
+    if (reuse instanceof LatLonBoundingBoxTokenStream == false) {
+      reuse = new LatLonBoundingBoxTokenStream();
+    }
+
+    final LatLonBoundingBoxTokenStream llbbts = (LatLonBoundingBoxTokenStream)reuse;
+    llbbts.setBoundingBox(null);
+
+    return reuse;
   }
 
   @Override

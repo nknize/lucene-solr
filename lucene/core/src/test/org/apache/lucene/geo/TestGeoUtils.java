@@ -18,6 +18,7 @@ package org.apache.lucene.geo;
 
 import java.util.Locale;
 
+import org.apache.lucene.geo.geometry.Rectangle;
 import org.apache.lucene.util.LuceneTestCase;
 import org.apache.lucene.util.SloppyMath;
 

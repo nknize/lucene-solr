@@ -14,11 +14,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.lucene.geo;
+package org.apache.lucene.geo.parsers;
 
 import java.text.ParseException;
 import java.util.ArrayList;
 import java.util.List;
+
+import org.apache.lucene.geo.geometry.Polygon;
 
 /*
   We accept either a whole type: Feature, like this:
@@ -48,12 +50,12 @@ import java.util.List;
  *  the top-level type is Feature, as the geometry of that feature. */
 
 @SuppressWarnings("unchecked")
-class SimpleGeoJSONPolygonParser {
+public class SimpleGeoJSONPolygonParser {
   final String input;
   private int upto;
   private String polyType;
   private List<Object> coordinates;
-    
+
   public SimpleGeoJSONPolygonParser(String input) {
     this.input = input;
   }
@@ -279,7 +281,7 @@ class SimpleGeoJSONPolygonParser {
 
         // skip the ,
         upto++;
-        
+
         if (upto == input.length()) {
           throw newParseException("hit EOF while parsing array");
         }
@@ -298,7 +300,7 @@ class SimpleGeoJSONPolygonParser {
       } else {
         throw newParseException("expected another array or number while parsing array, not '" + ch + "'");
       }
-      
+
       result.add(o);
     }
 

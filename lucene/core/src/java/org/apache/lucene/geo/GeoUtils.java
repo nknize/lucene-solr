@@ -20,8 +20,8 @@ import static org.apache.lucene.util.SloppyMath.TO_RADIANS;
 import static org.apache.lucene.util.SloppyMath.cos;
 import static org.apache.lucene.util.SloppyMath.haversinMeters;
 
-import org.apache.lucene.index.PointValues;
-import org.apache.lucene.index.PointValues.Relation;
+import org.apache.lucene.geo.geometry.GeoShape.Relation;
+import org.apache.lucene.geo.geometry.Rectangle;
 import org.apache.lucene.util.SloppyMath;
 
 /**
@@ -133,7 +133,7 @@ public final class GeoUtils {
    * Compute the relation between the provided box and distance query.
    * This only works for boxes that do not cross the dateline.
    */
-  public static PointValues.Relation relate(
+  public static Relation relate(
       double minLat, double maxLat, double minLon, double maxLon,
       double lat, double lon, double distanceSortKey, double axisLat) {
 
@@ -148,7 +148,7 @@ public final class GeoUtils {
           SloppyMath.haversinSortKey(lat, lon, maxLat, minLon) > distanceSortKey &&
           SloppyMath.haversinSortKey(lat, lon, maxLat, maxLon) > distanceSortKey) {
         // no points inside
-        return Relation.CELL_OUTSIDE_QUERY;
+        return Relation.DISJOINT;
       }
     }
 
@@ -158,10 +158,10 @@ public final class GeoUtils {
         SloppyMath.haversinSortKey(lat, lon, maxLat, minLon) <= distanceSortKey &&
         SloppyMath.haversinSortKey(lat, lon, maxLat, maxLon) <= distanceSortKey) {
       // we are fully enclosed, collect everything within this subtree
-      return Relation.CELL_INSIDE_QUERY;
+      return Relation.WITHIN;
     }
 
-    return Relation.CELL_CROSSES_QUERY;
+    return Relation.CROSSES;
   }
 
   /** Return whether all points of {@code [minLon,maxLon]} are within 90 degrees of {@code lon}. */

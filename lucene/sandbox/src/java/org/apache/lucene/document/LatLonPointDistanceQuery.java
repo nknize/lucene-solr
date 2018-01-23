@@ -18,9 +18,9 @@ package org.apache.lucene.document;
 
 import java.io.IOException;
 
-import org.apache.lucene.geo.GeoEncodingUtils;
 import org.apache.lucene.geo.GeoUtils;
-import org.apache.lucene.geo.Rectangle;
+import org.apache.lucene.geo.geometry.Circle;
+import org.apache.lucene.geo.geometry.Rectangle;
 import org.apache.lucene.index.FieldInfo;
 import org.apache.lucene.index.LeafReader;
 import org.apache.lucene.index.LeafReaderContext;
@@ -107,7 +107,7 @@ final class LatLonPointDistanceQuery extends Query {
 
     return new ConstantScoreWeight(this, boost) {
 
-      final GeoEncodingUtils.DistancePredicate distancePredicate = GeoEncodingUtils.createDistancePredicate(latitude, longitude, radiusMeters);
+      final Circle pointDistance = new Circle(latitude, longitude, radiusMeters);
 
       @Override
       public Scorer scorer(LeafReaderContext context) throws IOException {
@@ -214,7 +214,7 @@ final class LatLonPointDistanceQuery extends Query {
 
             int docLatitude = NumericUtils.sortableBytesToInt(packedValue, 0);
             int docLongitude = NumericUtils.sortableBytesToInt(packedValue, Integer.BYTES);
-            if (distancePredicate.test(docLatitude, docLongitude)) {
+            if (pointDistance.pointInside(docLatitude, docLongitude)) {
               adder.add(docID);
             }
           }
@@ -244,7 +244,7 @@ final class LatLonPointDistanceQuery extends Query {
             double latMax = decodeLatitude(maxPackedValue, 0);
             double lonMax = decodeLongitude(maxPackedValue, Integer.BYTES);
 
-            return GeoUtils.relate(latMin, latMax, lonMin, lonMax, latitude, longitude, sortKey, axisLat);
+            return GeoUtils.relate(latMin, latMax, lonMin, lonMax, latitude, longitude, sortKey, axisLat).toPointsRelation();
           }
         };
       }
@@ -283,7 +283,7 @@ final class LatLonPointDistanceQuery extends Query {
 
             int docLatitude = NumericUtils.sortableBytesToInt(packedValue, 0);
             int docLongitude = NumericUtils.sortableBytesToInt(packedValue, Integer.BYTES);
-            if (!distancePredicate.test(docLatitude, docLongitude)) {
+            if (pointDistance.pointInside(docLatitude, docLongitude) == false) {
               result.clear(docID);
               cost[0]--;
             }
@@ -309,7 +309,7 @@ final class LatLonPointDistanceQuery extends Query {
             double latMax = decodeLatitude(maxPackedValue, 0);
             double lonMax = decodeLongitude(maxPackedValue, Integer.BYTES);
 
-            Relation relation = GeoUtils.relate(latMin, latMax, lonMin, lonMax, latitude, longitude, sortKey, axisLat);
+            Relation relation = GeoUtils.relate(latMin, latMax, lonMin, lonMax, latitude, longitude, sortKey, axisLat).toPointsRelation();
             switch (relation) {
               case CELL_INSIDE_QUERY:
                 // all points match, skip this subtree

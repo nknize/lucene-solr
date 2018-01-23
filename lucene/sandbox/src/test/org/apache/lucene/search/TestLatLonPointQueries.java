@@ -22,7 +22,7 @@ import org.apache.lucene.document.Document;
 import org.apache.lucene.document.LatLonPoint;
 import org.apache.lucene.geo.BaseGeoPointTestCase;
 import org.apache.lucene.geo.GeoEncodingUtils;
-import org.apache.lucene.geo.Polygon;
+import org.apache.lucene.geo.geometry.Polygon;
 import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.index.IndexWriter;

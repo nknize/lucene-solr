@@ -18,9 +18,9 @@ package org.apache.lucene.document;
 
 import java.io.IOException;
 
-import org.apache.lucene.geo.GeoEncodingUtils;
 import org.apache.lucene.geo.GeoUtils;
 import org.apache.lucene.index.DocValues;
+import org.apache.lucene.geo.geometry.Circle;
 import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.index.SortedNumericDocValues;
 import org.apache.lucene.search.ConstantScoreScorer;
@@ -96,7 +96,7 @@ final class LatLonDocValuesDistanceQuery extends Query {
   public Weight createWeight(IndexSearcher searcher, ScoreMode scoreMode, float boost) throws IOException {
     return new ConstantScoreWeight(this, boost) {
 
-      private final GeoEncodingUtils.DistancePredicate distancePredicate = GeoEncodingUtils.createDistancePredicate(latitude, longitude, radiusMeters);
+      private final Circle pointDistance = new Circle(latitude, longitude, radiusMeters);
 
       @Override
       public Scorer scorer(LeafReaderContext context) throws IOException {
@@ -113,7 +113,7 @@ final class LatLonDocValuesDistanceQuery extends Query {
               final long value = values.nextValue();
               final int lat = (int) (value >>> 32);
               final int lon = (int) (value & 0xFFFFFFFF);
-              if (distancePredicate.test(lat, lon)) {
+              if (pointDistance.pointInside(lat, lon)) {
                 return true;
               }
             }

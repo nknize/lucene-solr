@@ -18,6 +18,7 @@ package org.apache.lucene.geo;
 
 import java.text.ParseException;
 
+import org.apache.lucene.geo.geometry.Polygon;
 import org.apache.lucene.util.LuceneTestCase;
 
 public class TestPolygon extends LuceneTestCase {

@@ -14,10 +14,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.lucene.geo;
+package org.apache.lucene.geo.geometry;
 
 import java.text.ParseException;
 import java.util.Arrays;
+
+import org.apache.lucene.geo.parsers.SimpleGeoJSONPolygonParser;
+import org.apache.lucene.index.PointValues;
 
 /**
  * Represents a closed polygon on the earth's surface.  You can either construct the Polygon directly yourself with {@code double[]}
@@ -35,41 +38,16 @@ import java.util.Arrays;
  * </ol>
  * @lucene.experimental
  */
-public final class Polygon {
-  private final double[] polyLats;
-  private final double[] polyLons;
+public final class Polygon extends Line {
   private final Polygon[] holes;
-
-  /** minimum latitude of this polygon's bounding box area */
-  public final double minLat;
-  /** maximum latitude of this polygon's bounding box area */
-  public final double maxLat;
-  /** minimum longitude of this polygon's bounding box area */
-  public final double minLon;
-  /** maximum longitude of this polygon's bounding box area */
-  public final double maxLon;
 
   /**
    * Creates a new Polygon from the supplied latitude/longitude array, and optionally any holes.
    */
   public Polygon(double[] polyLats, double[] polyLons, Polygon... holes) {
-    if (polyLats == null) {
-      throw new IllegalArgumentException("polyLats must not be null");
-    }
-    if (polyLons == null) {
-      throw new IllegalArgumentException("polyLons must not be null");
-    }
+    super(polyLats, polyLons);
     if (holes == null) {
       throw new IllegalArgumentException("holes must not be null");
-    }
-    if (polyLats.length != polyLons.length) {
-      throw new IllegalArgumentException("polyLats and polyLons must be equal length");
-    }
-    if (polyLats.length != polyLons.length) {
-      throw new IllegalArgumentException("polyLats and polyLons must be equal length");
-    }
-    if (polyLats.length < 4) {
-      throw new IllegalArgumentException("at least 4 polygon points required");
     }
     if (polyLats[0] != polyLats[polyLats.length-1]) {
       throw new IllegalArgumentException("first and last points of the polygon must be the same (it must close itself): polyLats[0]=" + polyLats[0] + " polyLats[" + (polyLats.length-1) + "]=" + polyLats[polyLats.length-1]);
@@ -77,46 +55,41 @@ public final class Polygon {
     if (polyLons[0] != polyLons[polyLons.length-1]) {
       throw new IllegalArgumentException("first and last points of the polygon must be the same (it must close itself): polyLons[0]=" + polyLons[0] + " polyLons[" + (polyLons.length-1) + "]=" + polyLons[polyLons.length-1]);
     }
-    for (int i = 0; i < polyLats.length; i++) {
-      GeoUtils.checkLatitude(polyLats[i]);
-      GeoUtils.checkLongitude(polyLons[i]);
-    }
     for (int i = 0; i < holes.length; i++) {
       Polygon inner = holes[i];
       if (inner.holes.length > 0) {
         throw new IllegalArgumentException("holes may not contain holes: polygons may not nest.");
       }
     }
-    this.polyLats = polyLats.clone();
-    this.polyLons = polyLons.clone();
     this.holes = holes.clone();
+  }
 
-    // compute bounding box
-    double minLat = Double.POSITIVE_INFINITY;
-    double maxLat = Double.NEGATIVE_INFINITY;
-    double minLon = Double.POSITIVE_INFINITY;
-    double maxLon = Double.NEGATIVE_INFINITY;
+  @Override
+  public ShapeType type() {
+    return ShapeType.POLYGON;
+  }
 
-    for (int i = 0;i < polyLats.length; i++) {
-      minLat = Math.min(polyLats[i], minLat);
-      maxLat = Math.max(polyLats[i], maxLat);
-      minLon = Math.min(polyLons[i], minLon);
-      maxLon = Math.max(polyLons[i], maxLon);
+  @Override
+  protected void checkLatArgs(final double[] lats) {
+    super.checkLatArgs(lats);
+    if (lats.length < 4) {
+      throw new IllegalArgumentException("at least 4 polygon points required");
     }
-    this.minLat = minLat;
-    this.maxLat = maxLat;
-    this.minLon = minLon;
-    this.maxLon = maxLon;
+  }
+
+  @Override
+  protected void checkLonArgs(final double[] lons) {
+    super.checkLonArgs(lons);
   }
 
   /** Returns a copy of the internal latitude array */
   public double[] getPolyLats() {
-    return polyLats.clone();
+    return getLats();
   }
 
   /** Returns a copy of the internal longitude array */
   public double[] getPolyLons() {
-    return polyLons.clone();
+    return getLons();
   }
 
   /** Returns a copy of the internal holes array */
@@ -124,38 +97,73 @@ public final class Polygon {
     return holes.clone();
   }
 
+  public int numHoles() {
+    return holes.length;
+  }
+
+  public Polygon getHole(int i) {
+    if (i >= holes.length) {
+      throw new IllegalArgumentException("Index " + i + " is outside the bounds of the " + holes.length + " polygon holes");
+    }
+    return holes[i];
+  }
+
+  /** Builds a EdgeTree from multipolygon */
+  public static EdgeTree createEdgeTree(Polygon... polygons) {
+    EdgeTree components[] = new EdgeTree[polygons.length];
+    for (int i = 0; i < components.length; i++) {
+      Polygon gon = polygons[i];
+      Polygon gonHoles[] = gon.getHoles();
+      EdgeTree holes = null;
+      if (gonHoles.length > 0) {
+        holes = createEdgeTree(gonHoles);
+      }
+      components[i] = new EdgeTree(gon, holes);
+    }
+    return EdgeTree.createTree(components, 0, components.length - 1, false);
+  }
+
+  @Override
+  public Relation relate(double minLat, double maxLat, double minLon, double maxLon) {
+    if (tree == null) {
+      tree = createEdgeTree(this);
+    }
+    return tree.relate(minLat, maxLat, minLon, maxLon);
+  }
+
+//  @Override
+//  public PointValues.Relation relate(GeoShape other) {
+//    switch (other.type()) {
+//      case POLYGON:
+//        return relatePolyPoly(getClass().cast(other));
+//    }
+//    // not yet implemented
+//    throw new UnsupportedOperationException("not yet able to relate other GeoShape types to linestrings");
+//  }
+
+//  public PointValues.Relation relatePolyPoly(Polygon other) {
+//    tree.relate
+//  }
+
   @Override
   public int hashCode() {
     final int prime = 31;
-    int result = 1;
+    int result = super.hashCode();
     result = prime * result + Arrays.hashCode(holes);
-    result = prime * result + Arrays.hashCode(polyLats);
-    result = prime * result + Arrays.hashCode(polyLons);
     return result;
   }
 
   @Override
   public boolean equals(Object obj) {
-    if (this == obj) return true;
-    if (obj == null) return false;
-    if (getClass() != obj.getClass()) return false;
+    if (super.equals(obj) == false) return false;
     Polygon other = (Polygon) obj;
     if (!Arrays.equals(holes, other.holes)) return false;
-    if (!Arrays.equals(polyLats, other.polyLats)) return false;
-    if (!Arrays.equals(polyLons, other.polyLons)) return false;
     return true;
   }
 
   @Override
   public String toString() {
-    StringBuilder sb = new StringBuilder();
-    for (int i = 0; i < polyLats.length; i++) {
-      sb.append("[")
-      .append(polyLats[i])
-      .append(", ")
-      .append(polyLons[i])
-      .append("] ");
-    }
+    StringBuilder sb = new StringBuilder(super.toString());
     if (holes.length > 0) {
       sb.append(", holes=");
       sb.append(Arrays.toString(holes));

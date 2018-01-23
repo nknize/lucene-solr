@@ -17,6 +17,8 @@
 
 package org.apache.lucene.geo;
 
+import org.apache.lucene.geo.geometry.Polygon;
+import org.apache.lucene.geo.geometry.Rectangle;
 import org.apache.lucene.util.SloppyMath;
 
 /** Draws shapes on the earth surface and renders using the very cool http://www.webglearth.org.

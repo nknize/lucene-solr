@@ -22,7 +22,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.PriorityQueue;
 
-import org.apache.lucene.geo.Rectangle;
+import org.apache.lucene.geo.geometry.Rectangle;
 import org.apache.lucene.index.PointValues.IntersectVisitor;
 import org.apache.lucene.index.PointValues.Relation;
 import org.apache.lucene.util.Bits;

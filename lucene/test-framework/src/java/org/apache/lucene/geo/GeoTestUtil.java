@@ -21,6 +21,8 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Random;
 
+import org.apache.lucene.geo.geometry.Polygon;
+import org.apache.lucene.geo.geometry.Rectangle;
 import org.apache.lucene.util.NumericUtils;
 import org.apache.lucene.util.SloppyMath;
 import org.apache.lucene.util.TestUtil;
@@ -239,7 +241,7 @@ public class GeoTestUtil {
       return new double[] { nextLatitude(), nextLongitude() };
     } else if (surpriseMe < 5) {
       // purely random within bounding box
-      return new double[] { nextLatitudeBetween(polygon.minLat, polygon.maxLat), nextLongitudeBetween(polygon.minLon, polygon.maxLon) };
+      return new double[] { nextLatitudeBetween(polygon.minLat(), polygon.maxLat()), nextLongitudeBetween(polygon.minLon(), polygon.maxLon()) };
     } else if (surpriseMe < 20) {
       // target a vertex
       int vertex = random().nextInt(polyLats.length - 1);
@@ -247,7 +249,7 @@ public class GeoTestUtil {
                             nextLongitudeNear(polyLons[vertex], polyLons[vertex+1] - polyLons[vertex]) };
     } else if (surpriseMe < 30) {
       // target points around the bounding box edges
-      Polygon container = boxPolygon(new Rectangle(polygon.minLat, polygon.maxLat, polygon.minLon, polygon.maxLon));
+      Polygon container = boxPolygon(new Rectangle(polygon.minLat(), polygon.maxLat(), polygon.minLon(), polygon.maxLon()));
       double containerLats[] = container.getPolyLats();
       double containerLons[] = container.getPolyLons();
       int startVertex = random().nextInt(containerLats.length - 1);
@@ -683,7 +685,7 @@ public class GeoTestUtil {
     double polyLats[] = polygon.getPolyLats();
     double polyLons[] = polygon.getPolyLons();
     // bounding box check required due to rounding errors (we don't solve that problem)
-    if (latitude < polygon.minLat || latitude > polygon.maxLat || longitude < polygon.minLon || longitude > polygon.maxLon) {
+    if (latitude < polygon.minLat() || latitude > polygon.maxLat() || longitude < polygon.minLon() || longitude > polygon.maxLon()) {
       return false;
     }
     

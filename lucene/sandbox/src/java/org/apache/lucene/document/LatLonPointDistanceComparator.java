@@ -18,7 +18,7 @@ package org.apache.lucene.document;
 
 import java.io.IOException;
 
-import org.apache.lucene.geo.Rectangle;
+import org.apache.lucene.geo.geometry.Rectangle;
 import org.apache.lucene.index.DocValues;
 import org.apache.lucene.index.FieldInfo;
 import org.apache.lucene.index.LeafReader;

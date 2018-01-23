@@ -22,7 +22,7 @@ import java.util.List;
 
 import org.apache.lucene.codecs.lucene60.Lucene60PointsFormat;
 import org.apache.lucene.geo.GeoUtils;
-import org.apache.lucene.geo.Polygon;
+import org.apache.lucene.geo.geometry.Polygon;
 import org.apache.lucene.index.FieldInfo;
 import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.index.PointValues;

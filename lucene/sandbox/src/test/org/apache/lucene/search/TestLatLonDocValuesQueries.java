@@ -20,7 +20,7 @@ import org.apache.lucene.document.Document;
 import org.apache.lucene.document.LatLonDocValuesField;
 import org.apache.lucene.geo.BaseGeoPointTestCase;
 import org.apache.lucene.geo.GeoEncodingUtils;
-import org.apache.lucene.geo.Polygon;
+import org.apache.lucene.geo.geometry.Polygon;
 
 public class TestLatLonDocValuesQueries extends BaseGeoPointTestCase {
 

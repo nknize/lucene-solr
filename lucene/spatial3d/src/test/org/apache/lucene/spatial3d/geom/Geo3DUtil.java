@@ -16,19 +16,7 @@
  */
 package org.apache.lucene.spatial3d.geom;
 
-import org.apache.lucene.spatial3d.geom.PlanetModel;
-import org.apache.lucene.spatial3d.geom.GeoPolygonFactory;
-import org.apache.lucene.spatial3d.geom.GeoPathFactory;
-import org.apache.lucene.spatial3d.geom.GeoCircleFactory;
-import org.apache.lucene.spatial3d.geom.GeoBBoxFactory;
-import org.apache.lucene.spatial3d.geom.GeoPath;
-import org.apache.lucene.spatial3d.geom.GeoPolygon;
-import org.apache.lucene.spatial3d.geom.GeoCircle;
-import org.apache.lucene.spatial3d.geom.GeoBBox;
-import org.apache.lucene.spatial3d.geom.GeoCompositePolygon;
-import org.apache.lucene.spatial3d.geom.GeoPoint;
-
-import org.apache.lucene.geo.Polygon;
+import org.apache.lucene.geo.geometry.Polygon;
 import org.apache.lucene.geo.GeoUtils;
 
 import java.util.List;

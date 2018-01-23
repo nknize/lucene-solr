@@ -19,10 +19,9 @@ package org.apache.lucene.document;
 import java.io.IOException;
 import java.util.Arrays;
 
-import org.apache.lucene.geo.GeoEncodingUtils;
-import org.apache.lucene.geo.Polygon;
-import org.apache.lucene.geo.Polygon2D;
-import org.apache.lucene.geo.Rectangle;
+import org.apache.lucene.geo.geometry.MultiPolygon;
+import org.apache.lucene.geo.geometry.Polygon;
+import org.apache.lucene.geo.geometry.Rectangle;
 import org.apache.lucene.index.FieldInfo;
 import org.apache.lucene.index.LeafReader;
 import org.apache.lucene.index.LeafReaderContext;
@@ -93,8 +92,8 @@ final class LatLonPointInPolygonQuery extends Query {
     NumericUtils.intToSortableBytes(encodeLongitude(box.minLon), minLon, 0);
     NumericUtils.intToSortableBytes(encodeLongitude(box.maxLon), maxLon, 0);
 
-    final Polygon2D tree = Polygon2D.create(polygons);
-    final GeoEncodingUtils.PolygonPredicate polygonPredicate = GeoEncodingUtils.createPolygonPredicate(polygons, tree);
+
+    final MultiPolygon multiPoly = new MultiPolygon(polygons);
 
     return new ConstantScoreWeight(this, boost) {
 
@@ -133,7 +132,7 @@ final class LatLonPointInPolygonQuery extends Query {
 
                            @Override
                            public void visit(int docID, byte[] packedValue) {
-                             if (polygonPredicate.test(NumericUtils.sortableBytesToInt(packedValue, 0),
+                             if (multiPoly.pointInside(NumericUtils.sortableBytesToInt(packedValue, 0),
                                                        NumericUtils.sortableBytesToInt(packedValue, Integer.BYTES))) {
                                adder.add(docID);
                              }
@@ -154,7 +153,7 @@ final class LatLonPointInPolygonQuery extends Query {
                              double cellMaxLat = decodeLatitude(maxPackedValue, 0);
                              double cellMaxLon = decodeLongitude(maxPackedValue, Integer.BYTES);
 
-                             return tree.relate(cellMinLat, cellMaxLat, cellMinLon, cellMaxLon);
+                             return multiPoly.relate(cellMinLat, cellMaxLat, cellMinLon, cellMaxLon).toPointsRelation();
                            }
                          });
 

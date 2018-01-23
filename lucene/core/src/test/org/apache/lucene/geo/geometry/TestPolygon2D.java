@@ -14,31 +14,34 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.lucene.geo;
+package org.apache.lucene.geo.geometry;
 
 import static org.apache.lucene.geo.GeoTestUtil.nextLatitude;
 import static org.apache.lucene.geo.GeoTestUtil.nextLongitude;
 import static org.apache.lucene.geo.GeoTestUtil.nextPolygon;
 
+import org.apache.lucene.geo.GeoTestUtil;
+import org.apache.lucene.geo.geometry.Polygon;
+import org.apache.lucene.geo.geometry.Rectangle;
 import org.apache.lucene.index.PointValues.Relation;
 import org.apache.lucene.util.LuceneTestCase;
 
 /** Test Polygon2D impl */
 public class TestPolygon2D extends LuceneTestCase {
-  
+
   /** Three boxes, an island inside a hole inside a shape */
   public void testMultiPolygon() {
     Polygon hole = new Polygon(new double[] { -10, -10, 10, 10, -10 }, new double[] { -10, 10, 10, -10, -10 });
     Polygon outer = new Polygon(new double[] { -50, -50, 50, 50, -50 }, new double[] { -50, 50, 50, -50, -50 }, hole);
     Polygon island = new Polygon(new double[] { -5, -5, 5, 5, -5 }, new double[] { -5, 5, 5, -5, -5 } );
-    Polygon2D polygon = Polygon2D.create(outer, island);
-    
+    EdgeTree polygon = EdgeTree.create(outer, island);
+
     // contains(point)
     assertTrue(polygon.contains(-2, 2)); // on the island
     assertFalse(polygon.contains(-6, 6)); // in the hole
     assertTrue(polygon.contains(-25, 25)); // on the mainland
     assertFalse(polygon.contains(-51, 51)); // in the ocean
-    
+
     // relate(box): this can conservatively return CELL_CROSSES_QUERY
     assertEquals(Relation.CELL_INSIDE_QUERY, polygon.relate(-2, 2, -2, 2)); // on the island
     assertEquals(Relation.CELL_OUTSIDE_QUERY, polygon.relate(6, 7, 6, 7)); // in the hole
@@ -49,7 +52,7 @@ public class TestPolygon2D extends LuceneTestCase {
     assertEquals(Relation.CELL_CROSSES_QUERY, polygon.relate(9, 11, 9, 11)); // overlapping the hole
     assertEquals(Relation.CELL_CROSSES_QUERY, polygon.relate(5, 6, 5, 6)); // overlapping the island
   }
-  
+
   public void testPacMan() throws Exception {
     // pacman
     double[] px = {0, 10, 10, 0, -8, -10, -8, 0, 10, 10, 0};
@@ -62,14 +65,14 @@ public class TestPolygon2D extends LuceneTestCase {
     double yMax = 1;//5;
 
     // test cell crossing poly
-    Polygon2D polygon = Polygon2D.create(new Polygon(py, px));
+    EdgeTree polygon = EdgeTree.create(new Polygon(py, px));
     assertEquals(Relation.CELL_CROSSES_QUERY, polygon.relate(yMin, yMax, xMin, xMax));
   }
-  
+
   public void testBoundingBox() throws Exception {
     for (int i = 0; i < 100; i++) {
-      Polygon2D polygon = Polygon2D.create(nextPolygon());
-      
+      EdgeTree polygon = EdgeTree.create(nextPolygon());
+
       for (int j = 0; j < 100; j++) {
         double latitude = nextLatitude();
         double longitude = nextLongitude();
@@ -81,13 +84,13 @@ public class TestPolygon2D extends LuceneTestCase {
       }
     }
   }
-  
+
   // targets the bounding box directly
   public void testBoundingBoxEdgeCases() throws Exception {
     for (int i = 0; i < 100; i++) {
       Polygon polygon = nextPolygon();
-      Polygon2D impl = Polygon2D.create(polygon);
-      
+      EdgeTree impl = EdgeTree.create(polygon);
+
       for (int j = 0; j < 100; j++) {
         double point[] = GeoTestUtil.nextPointNear(polygon);
         double latitude = point[0];
@@ -100,18 +103,18 @@ public class TestPolygon2D extends LuceneTestCase {
       }
     }
   }
-  
+
   /** If polygon.contains(box) returns true, then any point in that box should return true as well */
   public void testContainsRandom() throws Exception {
     int iters = atLeast(50);
     for (int i = 0; i < iters; i++) {
       Polygon polygon = nextPolygon();
-      Polygon2D impl = Polygon2D.create(polygon);
-      
+      EdgeTree impl = EdgeTree.create(polygon);
+
       for (int j = 0; j < 100; j++) {
         Rectangle rectangle = GeoTestUtil.nextBoxNear(polygon);
         // allowed to conservatively return false
-        if (impl.relate(rectangle.minLat, rectangle.maxLat, rectangle.minLon, rectangle.maxLon) == Relation.CELL_INSIDE_QUERY) {
+        if (impl.relate(rectangle.minLat, rectangle.maxLat, rectangle.minLon, rectangle.maxLon) == GeoShape.Relation.WITHIN) {
           for (int k = 0; k < 500; k++) {
             // this tests in our range but sometimes outside! so we have to double-check its really in other box
             double point[] = GeoTestUtil.nextPointNear(rectangle);
@@ -136,19 +139,19 @@ public class TestPolygon2D extends LuceneTestCase {
       }
     }
   }
-  
+
   /** If polygon.contains(box) returns true, then any point in that box should return true as well */
   // different from testContainsRandom in that its not a purely random test. we iterate the vertices of the polygon
   // and generate boxes near each one of those to try to be more efficient.
   public void testContainsEdgeCases() throws Exception {
     for (int i = 0; i < 1000; i++) {
       Polygon polygon = nextPolygon();
-      Polygon2D impl = Polygon2D.create(polygon);
+      EdgeTree impl = EdgeTree.create(polygon);
 
       for (int j = 0; j < 10; j++) {
         Rectangle rectangle = GeoTestUtil.nextBoxNear(polygon);
         // allowed to conservatively return false
-        if (impl.relate(rectangle.minLat, rectangle.maxLat, rectangle.minLon, rectangle.maxLon) == Relation.CELL_INSIDE_QUERY) {
+        if (impl.relate(rectangle.minLat, rectangle.maxLat, rectangle.minLon, rectangle.maxLon) == GeoShape.Relation.WITHIN) {
           for (int k = 0; k < 100; k++) {
             // this tests in our range but sometimes outside! so we have to double-check its really in other box
             double point[] = GeoTestUtil.nextPointNear(rectangle);
@@ -173,18 +176,18 @@ public class TestPolygon2D extends LuceneTestCase {
       }
     }
   }
-  
+
   /** If polygon.intersects(box) returns false, then any point in that box should return false as well */
   public void testIntersectRandom() {
     int iters = atLeast(10);
     for (int i = 0; i < iters; i++) {
       Polygon polygon = nextPolygon();
-      Polygon2D impl = Polygon2D.create(polygon);
-      
+      EdgeTree impl = EdgeTree.create(polygon);
+
       for (int j = 0; j < 100; j++) {
         Rectangle rectangle = GeoTestUtil.nextBoxNear(polygon);
         // allowed to conservatively return true.
-        if (impl.relate(rectangle.minLat, rectangle.maxLat, rectangle.minLon, rectangle.maxLon) == Relation.CELL_OUTSIDE_QUERY) {
+        if (impl.relate(rectangle.minLat, rectangle.maxLat, rectangle.minLon, rectangle.maxLon) == GeoShape.Relation.DISJOINT) {
           for (int k = 0; k < 1000; k++) {
             double point[] = GeoTestUtil.nextPointNear(rectangle);
             // this tests in our range but sometimes outside! so we have to double-check its really in other box
@@ -209,19 +212,19 @@ public class TestPolygon2D extends LuceneTestCase {
       }
     }
   }
-  
+
   /** If polygon.intersects(box) returns false, then any point in that box should return false as well */
   // different from testIntersectsRandom in that its not a purely random test. we iterate the vertices of the polygon
   // and generate boxes near each one of those to try to be more efficient.
   public void testIntersectEdgeCases() {
     for (int i = 0; i < 100; i++) {
       Polygon polygon = nextPolygon();
-      Polygon2D impl = Polygon2D.create(polygon);
+      EdgeTree impl = EdgeTree.create(polygon);
 
       for (int j = 0; j < 10; j++) {
         Rectangle rectangle = GeoTestUtil.nextBoxNear(polygon);
         // allowed to conservatively return false.
-        if (impl.relate(rectangle.minLat, rectangle.maxLat, rectangle.minLon, rectangle.maxLon) == Relation.CELL_OUTSIDE_QUERY) {
+        if (impl.relate(rectangle.minLat, rectangle.maxLat, rectangle.minLon, rectangle.maxLon) == GeoShape.Relation.DISJOINT) {
           for (int k = 0; k < 100; k++) {
             // this tests in our range but sometimes outside! so we have to double-check its really in other box
             double point[] = GeoTestUtil.nextPointNear(rectangle);
@@ -246,10 +249,10 @@ public class TestPolygon2D extends LuceneTestCase {
       }
     }
   }
-  
+
   /** Tests edge case behavior with respect to insideness */
   public void testEdgeInsideness() {
-    Polygon2D poly = Polygon2D.create(new Polygon(new double[] { -2, -2, 2, 2, -2 }, new double[] { -2, 2, 2, -2, -2 }));
+    EdgeTree poly = EdgeTree.create(new Polygon(new double[] { -2, -2, 2, 2, -2 }, new double[] { -2, 2, 2, -2, -2 }));
     assertTrue(poly.contains(-2, -2)); // bottom left corner: true
     assertFalse(poly.contains(-2, 2));  // bottom right corner: false
     assertFalse(poly.contains(2, -2));  // top left corner: false
@@ -267,7 +270,7 @@ public class TestPolygon2D extends LuceneTestCase {
     assertTrue(poly.contains(0, -2));  // left side: true
     assertTrue(poly.contains(1, -2));  // left side: true
   }
-  
+
   /** Tests current impl against original algorithm */
   public void testContainsAgainstOriginal() {
     int iters = atLeast(100);
@@ -277,8 +280,8 @@ public class TestPolygon2D extends LuceneTestCase {
       while (polygon.getHoles().length > 0) {
         polygon = nextPolygon();
       }
-      Polygon2D impl = Polygon2D.create(polygon);
-      
+      EdgeTree impl = EdgeTree.create(polygon);
+
       // random lat/lons against polygon
       for (int j = 0; j < 1000; j++) {
         double point[] = GeoTestUtil.nextPointNear(polygon);
