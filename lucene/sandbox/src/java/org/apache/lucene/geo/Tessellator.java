@@ -24,8 +24,8 @@ import org.apache.lucene.util.BitUtil;
 
 import static java.lang.Math.max;
 import static java.lang.Math.min;
-import static org.apache.lucene.geo.GeoEncodingUtils.encodeLatitude;
-import static org.apache.lucene.geo.GeoEncodingUtils.encodeLongitude;
+import static org.apache.lucene.geo.GeoEncodingUtils.encodeLatitudeCeil;
+import static org.apache.lucene.geo.GeoEncodingUtils.encodeLongitudeCeil;
 import static org.apache.lucene.geo.GeoUtils.orient;
 
 /**
@@ -795,8 +795,8 @@ final public class Tessellator {
     protected Node(final Polygon polygon, final int index) {
       this.idx = index;
       this.polygon = polygon;
-      this.y = encodeLatitude(polygon.getPolyLat(idx));
-      this.x = encodeLongitude(polygon.getPolyLon(idx));
+      this.y = encodeLatitudeCeil(polygon.getPolyLat(idx));
+      this.x = encodeLongitudeCeil(polygon.getPolyLon(idx));
       this.morton = BitUtil.interleave(x ^ 0x80000000, y ^ 0x80000000);
       this.previous = null;
       this.next = null;

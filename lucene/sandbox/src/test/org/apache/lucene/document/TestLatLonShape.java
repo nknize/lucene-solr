@@ -35,17 +35,17 @@ import static org.apache.lucene.geo.GeoEncodingUtils.decodeLatitude;
 import static org.apache.lucene.geo.GeoEncodingUtils.decodeLongitude;
 
 /** Test case for indexing polygons and querying by bounding box */
-public class TestLatLonPolygon extends LuceneTestCase {
+public class TestLatLonShape extends LuceneTestCase {
   protected static String FIELDNAME = "field";
   protected void addPolygonsToDoc(String field, Document doc, Polygon polygon) {
-    Field[] fields = LatLonPolygon.createIndexableFields(field, polygon);
+    Field[] fields = LatLonShape.createIndexableFields(field, polygon);
     for (Field f : fields) {
       doc.add(f);
     }
   }
 
   protected Query newRectQuery(String field, double minLat, double maxLat, double minLon, double maxLon) {
-    return LatLonPolygon.newBoxQuery(field, minLat, maxLat, minLon, maxLon);
+    return LatLonShape.newBoxQuery(field, minLat, maxLat, minLon, maxLon);
   }
 
   public void testRandomPolygons() throws Exception {

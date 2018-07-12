@@ -23,24 +23,24 @@ import org.apache.lucene.geo.Polygon;
 import org.apache.lucene.geo.Tessellator;
 import org.apache.lucene.geo.Tessellator.Triangle;
 import org.apache.lucene.index.PointValues;
-import org.apache.lucene.search.LatLonPolygonBoundingBoxQuery;
+import org.apache.lucene.search.LatLonShapeBoundingBoxQuery;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.NumericUtils;
 
 /**
- * An indexed polygon utility class.
+ * An indexed shape utility class.
  * <p>
  * {@link Polygon}'s are decomposed into a triangular mesh using the {@link Tessellator} utility class
  * Each {@link Triangle} is encoded and indexed as a multi-value field.
  *
  * <p>
- * Finding all polygons within a range at search time is
- * efficient.  Multiple polygons for the same field in one document
- * is allowed.
+ * Finding all shapes within a range at search time is
+ * efficient.
  * <p>
  * This class defines static factory methods for common operations:
  * <ul>
+ *   <li>{@link #createIndexableFields(String, Polygon)} for matching polygons that intersect a bounding box.
  *   <li>{@link #newBoxQuery newBoxQuery()} for matching polygons that intersect a bounding box.
  * </ul>
 
@@ -52,8 +52,8 @@ import org.apache.lucene.util.NumericUtils;
  *
  * @lucene.experimental
  */
-public class LatLonPolygon {
-  protected static final int BYTES = LatLonPoint.BYTES;
+public class LatLonShape {
+  public static final int BYTES = LatLonPoint.BYTES;
 
   protected static final FieldType TYPE = new FieldType();
   static {
@@ -62,7 +62,7 @@ public class LatLonPolygon {
   }
 
   // no instance:
-  private LatLonPolygon() {
+  private LatLonShape() {
   }
 
   /** the lionshare of the indexing is done by the tessellator */
@@ -75,9 +75,12 @@ public class LatLonPolygon {
     return fields.toArray(new Field[fields.size()]);
   }
 
-  /** create a query to find all polygons that intersect a defined bounding box */
+  /** create a query to find all polygons that intersect a defined bounding box
+   *  note: does not currently support dateline crossing boxes
+   * @todo split dateline crossing boxes into two queries like {@link LatLonPoint#newBoxQuery}
+   **/
   public static Query newBoxQuery(String field, double minLatitude, double maxLatitude, double minLongitude, double maxLongitude) {
-    return new LatLonPolygonBoundingBoxQuery(field, minLatitude, maxLatitude, minLongitude, maxLongitude);
+    return new LatLonShapeBoundingBoxQuery(field, minLatitude, maxLatitude, minLongitude, maxLongitude);
   }
 
   /** polygons are decomposed into tessellated triangles using {@link org.apache.lucene.geo.Tessellator}

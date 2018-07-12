@@ -22,7 +22,7 @@ import java.util.Set;
 
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field;
-import org.apache.lucene.document.LatLonPolygon;
+import org.apache.lucene.document.LatLonShape;
 import org.apache.lucene.document.NumericDocValuesField;
 import org.apache.lucene.geo.GeoTestUtil;
 import org.apache.lucene.geo.Polygon;
@@ -47,11 +47,11 @@ import org.apache.lucene.util.LuceneTestCase;
 
 import static org.apache.lucene.geo.GeoEncodingUtils.decodeLatitude;
 import static org.apache.lucene.geo.GeoEncodingUtils.decodeLongitude;
-import static org.apache.lucene.geo.GeoEncodingUtils.encodeLatitude;
-import static org.apache.lucene.geo.GeoEncodingUtils.encodeLongitude;
+import static org.apache.lucene.geo.GeoEncodingUtils.encodeLatitudeCeil;
+import static org.apache.lucene.geo.GeoEncodingUtils.encodeLongitudeCeil;
 
-/** base Test case for {@link LatLonPolygon} indexing and search */
-public class TestLatLonPolygonQueries extends LuceneTestCase {
+/** base Test case for {@link LatLonShape} indexing and search */
+public class TestLatLonShapeQueries extends LuceneTestCase {
   protected static final String FIELD_NAME = "shape";
 
   private Polygon quantizePolygon(Polygon polygon) {
@@ -66,22 +66,22 @@ public class TestLatLonPolygonQueries extends LuceneTestCase {
   }
 
   protected double quantizeLat(double rawLat) {
-    return decodeLatitude(encodeLatitude(rawLat));
+    return decodeLatitude(encodeLatitudeCeil(rawLat));
   }
 
   protected double quantizeLon(double rawLon) {
-    return decodeLongitude(encodeLongitude(rawLon));
+    return decodeLongitude(encodeLongitudeCeil(rawLon));
   }
 
   protected void addPolygonsToDoc(String field, Document doc, Polygon polygon) {
-    Field[] fields = LatLonPolygon.createIndexableFields(field, polygon);
+    Field[] fields = LatLonShape.createIndexableFields(field, polygon);
     for (Field f : fields) {
       doc.add(f);
     }
   }
 
   protected Query newRectQuery(String field, double minLat, double maxLat, double minLon, double maxLon) {
-    return LatLonPolygon.newBoxQuery(field, minLat, maxLat, minLon, maxLon);
+    return LatLonShape.newBoxQuery(field, minLat, maxLat, minLon, maxLon);
   }
 
   public void testRandomTiny() throws Exception {

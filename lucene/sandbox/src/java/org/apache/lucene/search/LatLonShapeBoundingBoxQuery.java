@@ -20,6 +20,7 @@ import java.io.IOException;
 import java.util.Arrays;
 import java.util.Objects;
 
+import org.apache.lucene.document.LatLonPoint;
 import org.apache.lucene.geo.Polygon;
 import org.apache.lucene.geo.Tessellator;
 import org.apache.lucene.index.LeafReader;
@@ -35,18 +36,18 @@ import org.apache.lucene.util.NumericUtils;
 
 import static org.apache.lucene.geo.GeoEncodingUtils.decodeLatitude;
 import static org.apache.lucene.geo.GeoEncodingUtils.decodeLongitude;
-import static org.apache.lucene.geo.GeoEncodingUtils.encodeLatitude;
-import static org.apache.lucene.geo.GeoEncodingUtils.encodeLongitude;
+import static org.apache.lucene.geo.GeoEncodingUtils.encodeLatitudeCeil;
+import static org.apache.lucene.geo.GeoEncodingUtils.encodeLongitudeCeil;
 
 /**
  * Finds all previously indexed shapes that intersect the specified bounding box.
  *
  * <p>The field must be indexed using
- * {@link org.apache.lucene.document.LatLonPolygon#createIndexableFields(String, Polygon)} added per document.
+ * {@link org.apache.lucene.document.LatLonShape#createIndexableFields(String, Polygon)} added per document.
  *
  *  @lucene.experimental
  **/
-public class LatLonPolygonBoundingBoxQuery extends Query {
+public class LatLonShapeBoundingBoxQuery extends Query {
   final String field;
   final byte[] bbox;
   final int minX;
@@ -54,17 +55,17 @@ public class LatLonPolygonBoundingBoxQuery extends Query {
   final int minY;
   final int maxY;
 
-  public LatLonPolygonBoundingBoxQuery(String field, double minLat, double maxLat, double minLon, double maxLon) {
+  public LatLonShapeBoundingBoxQuery(String field, double minLat, double maxLat, double minLon, double maxLon) {
     this.field = field;
-    this.bbox = new byte[2 * Long.BYTES];
-    this.minX = encodeLongitude(minLon);
-    this.maxX = encodeLongitude(maxLon);
-    this.minY = encodeLatitude(minLat);
-    this.maxY = encodeLatitude(maxLat);
+    this.bbox = new byte[4 * LatLonPoint.BYTES];
+    this.minX = encodeLongitudeCeil(minLon);
+    this.maxX = encodeLongitudeCeil(maxLon);
+    this.minY = encodeLatitudeCeil(minLat);
+    this.maxY = encodeLatitudeCeil(maxLat);
     NumericUtils.intToSortableBytes(this.minY, this.bbox, 0);
-    NumericUtils.intToSortableBytes(this.minX, this.bbox, Integer.BYTES);
-    NumericUtils.intToSortableBytes(this.maxY, this.bbox, Long.BYTES);
-    NumericUtils.intToSortableBytes(this.maxX, this.bbox, 3 * Integer.BYTES);
+    NumericUtils.intToSortableBytes(this.minX, this.bbox, LatLonPoint.BYTES);
+    NumericUtils.intToSortableBytes(this.maxY, this.bbox, 2 * LatLonPoint.BYTES);
+    NumericUtils.intToSortableBytes(this.maxX, this.bbox, 3 * LatLonPoint.BYTES);
   }
 
   @Override
@@ -72,13 +73,13 @@ public class LatLonPolygonBoundingBoxQuery extends Query {
     return new ConstantScoreWeight(this, boost) {
 
       private boolean queryContains(byte[] t, int point) {
-        final int yIdx = Long.BYTES * point;
-        final int xIdx = yIdx + Integer.BYTES;
+        final int yIdx = 2 * LatLonPoint.BYTES * point;
+        final int xIdx = yIdx + LatLonPoint.BYTES;
 
-        if (FutureArrays.compareUnsigned(t, yIdx, xIdx, bbox, 0, Integer.BYTES) < 0 ||                     //minY
-            FutureArrays.compareUnsigned(t, yIdx, xIdx, bbox, Long.BYTES, Long.BYTES + Integer.BYTES) > 0 ||  //maxY
-            FutureArrays.compareUnsigned(t, xIdx, xIdx + Integer.BYTES, bbox, Integer.BYTES, Long.BYTES) < 0 || // minX
-            FutureArrays.compareUnsigned(t, xIdx, xIdx + Integer.BYTES, bbox, Long.BYTES + Integer.BYTES, bbox.length) > 0) {
+        if (FutureArrays.compareUnsigned(t, yIdx, xIdx, bbox, 0, LatLonPoint.BYTES) < 0 ||                     //minY
+            FutureArrays.compareUnsigned(t, yIdx, xIdx, bbox, 2 * LatLonPoint.BYTES, 3 * LatLonPoint.BYTES) > 0 ||  //maxY
+            FutureArrays.compareUnsigned(t, xIdx, xIdx + LatLonPoint.BYTES, bbox, LatLonPoint.BYTES, 2 * LatLonPoint.BYTES) < 0 || // minX
+            FutureArrays.compareUnsigned(t, xIdx, xIdx + LatLonPoint.BYTES, bbox, 3 * LatLonPoint.BYTES, bbox.length) > 0) {
           return false;
         }
         return true;
@@ -121,12 +122,12 @@ public class LatLonPolygonBoundingBoxQuery extends Query {
           return true;
         }
 
-        int aX = NumericUtils.sortableBytesToInt(t, Integer.BYTES);
         int aY = NumericUtils.sortableBytesToInt(t, 0);
-        int bX = NumericUtils.sortableBytesToInt(t, Long.BYTES + Integer.BYTES);
-        int bY = NumericUtils.sortableBytesToInt(t, Long.BYTES);
-        int cX = NumericUtils.sortableBytesToInt(t, Long.BYTES * 2 + Integer.BYTES);
-        int cY = NumericUtils.sortableBytesToInt(t, Long.BYTES * 2);
+        int aX = NumericUtils.sortableBytesToInt(t, LatLonPoint.BYTES);
+        int bY = NumericUtils.sortableBytesToInt(t, 2 * LatLonPoint.BYTES);
+        int bX = NumericUtils.sortableBytesToInt(t, 3 * LatLonPoint.BYTES);
+        int cY = NumericUtils.sortableBytesToInt(t, 4 * LatLonPoint.BYTES);
+        int cX = NumericUtils.sortableBytesToInt(t, 5 * LatLonPoint.BYTES);
 
         int tMinX = StrictMath.min(StrictMath.min(aX, bX), cX);
         int tMaxX = StrictMath.max(StrictMath.max(aX, bX), cX);
@@ -165,45 +166,45 @@ public class LatLonPolygonBoundingBoxQuery extends Query {
         int maxYOfs = 0;
         for (int d = 1; d < 3; ++d) {
           // check minX
-          int aOfs = (minXOfs * Long.BYTES) + Integer.BYTES;
-          int bOfs = (d * Long.BYTES) + Integer.BYTES;
-          if (FutureArrays.compareUnsigned(minTriangle, bOfs, bOfs + Integer.BYTES, minTriangle, aOfs, aOfs + Integer.BYTES) < 0) {
+          int aOfs = (minXOfs * 2 * LatLonPoint.BYTES) + LatLonPoint.BYTES;
+          int bOfs = (d * 2 * LatLonPoint.BYTES) + LatLonPoint.BYTES;
+          if (FutureArrays.compareUnsigned(minTriangle, bOfs, bOfs + LatLonPoint.BYTES, minTriangle, aOfs, aOfs + LatLonPoint.BYTES) < 0) {
             minXOfs = d;
           }
           // check maxX
-          aOfs = (maxXOfs * Long.BYTES) + Integer.BYTES;
-          if (FutureArrays.compareUnsigned(maxTriangle, bOfs, bOfs + Integer.BYTES, maxTriangle, aOfs, aOfs + Integer.BYTES) > 0) {
+          aOfs = (maxXOfs * 2 * LatLonPoint.BYTES) + LatLonPoint.BYTES;
+          if (FutureArrays.compareUnsigned(maxTriangle, bOfs, bOfs + LatLonPoint.BYTES, maxTriangle, aOfs, aOfs + LatLonPoint.BYTES) > 0) {
             maxXOfs = d;
           }
           // check minY
-          aOfs = minYOfs * Long.BYTES;
-          bOfs = d * Long.BYTES;
-          if (FutureArrays.compareUnsigned(minTriangle, bOfs, bOfs + Integer.BYTES, minTriangle, aOfs, aOfs + Integer.BYTES) < 0) {
+          aOfs = minYOfs * 2 * LatLonPoint.BYTES;
+          bOfs = d * 2 * LatLonPoint.BYTES;
+          if (FutureArrays.compareUnsigned(minTriangle, bOfs, bOfs + LatLonPoint.BYTES, minTriangle, aOfs, aOfs + LatLonPoint.BYTES) < 0) {
             minYOfs = d;
           }
           // check maxY
-          aOfs = maxYOfs * Long.BYTES;
-          if (FutureArrays.compareUnsigned(maxTriangle, bOfs, bOfs + Integer.BYTES, maxTriangle, aOfs, aOfs + Integer.BYTES) > 0) {
+          aOfs = maxYOfs * 2 * LatLonPoint.BYTES;
+          if (FutureArrays.compareUnsigned(maxTriangle, bOfs, bOfs + LatLonPoint.BYTES, maxTriangle, aOfs, aOfs + LatLonPoint.BYTES) > 0) {
             maxYOfs = d;
           }
         }
-        minXOfs = (minXOfs * Long.BYTES) + Integer.BYTES;
-        maxXOfs = (maxXOfs * Long.BYTES) + Integer.BYTES;
-        minYOfs *= Long.BYTES;
-        maxYOfs *= Long.BYTES;
+        minXOfs = (minXOfs * 2 * LatLonPoint.BYTES) + LatLonPoint.BYTES;
+        maxXOfs = (maxXOfs * 2 * LatLonPoint.BYTES) + LatLonPoint.BYTES;
+        minYOfs *= 2 * LatLonPoint.BYTES;
+        maxYOfs *= 2 * LatLonPoint.BYTES;
 
         // check bounding box (DISJOINT)
-        if (FutureArrays.compareUnsigned(minTriangle, minXOfs, minXOfs + Integer.BYTES, bbox, Long.BYTES + Integer.BYTES, Long.BYTES * 2) > 0 ||
-            FutureArrays.compareUnsigned(maxTriangle, maxXOfs, maxXOfs + Integer.BYTES, bbox, Integer.BYTES, Long.BYTES) < 0 ||
-            FutureArrays.compareUnsigned(minTriangle, minYOfs, minYOfs + Integer.BYTES, bbox, Long.BYTES, Long.BYTES + Integer.BYTES) > 0 ||
-            FutureArrays.compareUnsigned(maxTriangle, maxYOfs, maxYOfs + Integer.BYTES, bbox, 0, Integer.BYTES) < 0) {
+        if (FutureArrays.compareUnsigned(minTriangle, minXOfs, minXOfs + LatLonPoint.BYTES, bbox, 3 * LatLonPoint.BYTES, 4 * LatLonPoint.BYTES) > 0 ||
+            FutureArrays.compareUnsigned(maxTriangle, maxXOfs, maxXOfs + LatLonPoint.BYTES, bbox, LatLonPoint.BYTES, 2 * LatLonPoint.BYTES) < 0 ||
+            FutureArrays.compareUnsigned(minTriangle, minYOfs, minYOfs + LatLonPoint.BYTES, bbox, 2 * LatLonPoint.BYTES, 3 * LatLonPoint.BYTES) > 0 ||
+            FutureArrays.compareUnsigned(maxTriangle, maxYOfs, maxYOfs + LatLonPoint.BYTES, bbox, 0, LatLonPoint.BYTES) < 0) {
           return Relation.CELL_OUTSIDE_QUERY;
         }
 
-        if (FutureArrays.compareUnsigned(minTriangle, minXOfs, minXOfs + Integer.BYTES, bbox, Integer.BYTES, Long.BYTES) > 0 &&
-            FutureArrays.compareUnsigned(maxTriangle, maxXOfs, maxXOfs + Integer.BYTES, bbox, Long.BYTES + Integer.BYTES, Long.BYTES * 2) < 0 &&
-            FutureArrays.compareUnsigned(minTriangle, minYOfs, minYOfs + Integer.BYTES, bbox, 0, Integer.BYTES) > 0 &&
-            FutureArrays.compareUnsigned(maxTriangle, maxYOfs, maxYOfs + Integer.BYTES, bbox, Long.BYTES, Long.BYTES) < 0) {
+        if (FutureArrays.compareUnsigned(minTriangle, minXOfs, minXOfs + LatLonPoint.BYTES, bbox, LatLonPoint.BYTES, 2 * LatLonPoint.BYTES) > 0 &&
+            FutureArrays.compareUnsigned(maxTriangle, maxXOfs, maxXOfs + LatLonPoint.BYTES, bbox, 3 * LatLonPoint.BYTES, 4 * LatLonPoint.BYTES) < 0 &&
+            FutureArrays.compareUnsigned(minTriangle, minYOfs, minYOfs + LatLonPoint.BYTES, bbox, 0, LatLonPoint.BYTES) > 0 &&
+            FutureArrays.compareUnsigned(maxTriangle, maxYOfs, maxYOfs + LatLonPoint.BYTES, bbox, 2 * LatLonPoint.BYTES, 2 * LatLonPoint.BYTES) < 0) {
           return Relation.CELL_INSIDE_QUERY;
         }
         return Relation.CELL_CROSSES_QUERY;
@@ -279,23 +280,9 @@ public class LatLonPolygonBoundingBoxQuery extends Query {
           return null;
         }
 
-        boolean allDocsMatch;
-        if (values.getDocCount() == reader.maxDoc()) {
-          final byte[] fieldPackedLower = values.getMinPackedValue();
-          final byte[] fieldPackedUpper = values.getMaxPackedValue();
-          allDocsMatch = true;
-          // check bounding box against range of triangle points
-          for (int i = 0; i < 3; ++i) {
-            int triOfs = i * Long.BYTES;
-            if (FutureArrays.compareUnsigned(bbox, 0, Integer.BYTES, fieldPackedLower, triOfs, triOfs + Integer.BYTES) > 0 || // minY
-                FutureArrays.compareUnsigned(bbox, Integer.BYTES, Long.BYTES, fieldPackedLower, triOfs + Integer.BYTES, triOfs + Long.BYTES) > 0 || // minX
-                FutureArrays.compareUnsigned(bbox, Long.BYTES, Long.BYTES + Integer.BYTES, fieldPackedUpper, triOfs, triOfs + Integer.BYTES) < 0 ||  // maxY
-                FutureArrays.compareUnsigned(bbox, Long.BYTES + Integer.BYTES, Long.BYTES * 2, fieldPackedUpper, triOfs + Integer.BYTES, triOfs + Long.BYTES) < 0) { // maxX
-              allDocsMatch = false;
-              break;
-            }
-          }
-        } else {
+        boolean allDocsMatch = true;
+        if (values.getDocCount() != reader.maxDoc() ||
+            relateRangeToQuery(values.getMinPackedValue(), values.getMaxPackedValue()) != Relation.CELL_INSIDE_QUERY) {
           allDocsMatch = false;
         }
 
@@ -383,7 +370,7 @@ public class LatLonPolygonBoundingBoxQuery extends Query {
     return sameClassAs(o) && equalsTo(getClass().cast(o));
   }
 
-  private boolean equalsTo(LatLonPolygonBoundingBoxQuery o) {
+  private boolean equalsTo(LatLonShapeBoundingBoxQuery o) {
     return Objects.equals(field, o.field) &&
         Arrays.equals(bbox, o.bbox);
   }
@@ -398,11 +385,11 @@ public class LatLonPolygonBoundingBoxQuery extends Query {
 
   public String printTriangle(byte[] bytes) {
     double aLat = decodeLatitude(NumericUtils.sortableBytesToInt(bytes, 0));
-    double aLon = decodeLongitude(NumericUtils.sortableBytesToInt(bytes, Integer.BYTES));
-    double bLat = decodeLatitude(NumericUtils.sortableBytesToInt(bytes, Long.BYTES));
-    double bLon = decodeLongitude(NumericUtils.sortableBytesToInt(bytes, 3 * Integer.BYTES));
-    double cLat = decodeLatitude(NumericUtils.sortableBytesToInt(bytes, 4 * Integer.BYTES));
-    double cLon = decodeLongitude(NumericUtils.sortableBytesToInt(bytes, 5 * Integer.BYTES));
+    double aLon = decodeLongitude(NumericUtils.sortableBytesToInt(bytes, LatLonPoint.BYTES));
+    double bLat = decodeLatitude(NumericUtils.sortableBytesToInt(bytes, 2 * LatLonPoint.BYTES));
+    double bLon = decodeLongitude(NumericUtils.sortableBytesToInt(bytes, 3 * LatLonPoint.BYTES));
+    double cLat = decodeLatitude(NumericUtils.sortableBytesToInt(bytes, 4 * LatLonPoint.BYTES));
+    double cLon = decodeLongitude(NumericUtils.sortableBytesToInt(bytes, 5 * LatLonPoint.BYTES));
     return "[" + aLat + ", " + aLon + "    " + bLat + ", " + bLon + "    " + cLat + ", " + cLon + "]";
   }
 }
