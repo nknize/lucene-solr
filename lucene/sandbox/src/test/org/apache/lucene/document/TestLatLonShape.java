@@ -16,13 +16,9 @@
  */
 package org.apache.lucene.document;
 
-import java.io.PrintWriter;
-import java.util.List;
-
 import com.carrotsearch.randomizedtesting.generators.RandomNumbers;
 import org.apache.lucene.geo.GeoTestUtil;
 import org.apache.lucene.geo.Polygon;
-import org.apache.lucene.geo.Tessellator;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.index.RandomIndexWriter;
 import org.apache.lucene.search.IndexSearcher;
@@ -30,9 +26,6 @@ import org.apache.lucene.search.Query;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.util.LuceneTestCase;
 import org.apache.lucene.util.TestUtil;
-
-import static org.apache.lucene.geo.GeoEncodingUtils.decodeLatitude;
-import static org.apache.lucene.geo.GeoEncodingUtils.decodeLongitude;
 
 /** Test case for indexing polygons and querying by bounding box */
 public class TestLatLonShape extends LuceneTestCase {

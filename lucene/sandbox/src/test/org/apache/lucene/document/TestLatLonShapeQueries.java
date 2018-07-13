@@ -14,16 +14,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.lucene.search;
+package org.apache.lucene.document;
 
 import java.io.IOException;
 import java.util.HashSet;
 import java.util.Set;
 
-import org.apache.lucene.document.Document;
-import org.apache.lucene.document.Field;
-import org.apache.lucene.document.LatLonShape;
-import org.apache.lucene.document.NumericDocValuesField;
 import org.apache.lucene.geo.GeoTestUtil;
 import org.apache.lucene.geo.Polygon;
 import org.apache.lucene.geo.Polygon2D;
@@ -39,6 +35,10 @@ import org.apache.lucene.index.NumericDocValues;
 import org.apache.lucene.index.PointValues.Relation;
 import org.apache.lucene.index.SerialMergeScheduler;
 import org.apache.lucene.index.Term;
+import org.apache.lucene.search.IndexSearcher;
+import org.apache.lucene.search.Query;
+import org.apache.lucene.search.ScoreMode;
+import org.apache.lucene.search.SimpleCollector;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.util.Bits;
 import org.apache.lucene.util.FixedBitSet;

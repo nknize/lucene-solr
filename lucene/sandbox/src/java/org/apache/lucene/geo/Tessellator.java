@@ -22,8 +22,6 @@ import java.util.List;
 import org.apache.lucene.geo.GeoUtils.WindingOrder;
 import org.apache.lucene.util.BitUtil;
 
-import static java.lang.Math.max;
-import static java.lang.Math.min;
 import static org.apache.lucene.geo.GeoEncodingUtils.encodeLatitude;
 import static org.apache.lucene.geo.GeoEncodingUtils.encodeLongitude;
 import static org.apache.lucene.geo.GeoUtils.orient;
@@ -359,10 +357,10 @@ final public class Tessellator {
     int idx;
 
     // triangle bbox (flip the bits so negative encoded values are < positive encoded values)
-    int minTX = min(min(ear.previous.x, ear.x), ear.next.x) ^ 0x80000000;
-    int minTY = min(min(ear.previous.y, ear.y), ear.next.y) ^ 0x80000000;
-    int maxTX = max(max(ear.previous.x, ear.x), ear.next.x) ^ 0x80000000;
-    int maxTY = max(max(ear.previous.y, ear.y), ear.next.y) ^ 0x80000000;
+    int minTX = StrictMath.min(StrictMath.min(ear.previous.x, ear.x), ear.next.x) ^ 0x80000000;
+    int minTY = StrictMath.min(StrictMath.min(ear.previous.y, ear.y), ear.next.y) ^ 0x80000000;
+    int maxTX = StrictMath.max(StrictMath.max(ear.previous.x, ear.x), ear.next.x) ^ 0x80000000;
+    int maxTY = StrictMath.max(StrictMath.max(ear.previous.y, ear.y), ear.next.y) ^ 0x80000000;
 
     // z-order range for the current triangle bbox;
     long minZ = BitUtil.interleave(minTX, minTY);
@@ -793,8 +791,6 @@ final public class Tessellator {
     }
 
     /** get the x value */
-    // nocommit - cleanup, this is here for testing the use of
-    // encoded values vs full precision double values
     public final double getX() {
       return polygon.getPolyLon(idx);
     }
