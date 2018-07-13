@@ -51,7 +51,7 @@ public final class Polygon {
   /** maximum longitude of this polygon's bounding box area */
   public final double maxLon;
   /** winding order of the vertices */
-  private WindingOrder windingOrder;
+  private final WindingOrder windingOrder;
 
   /**
    * Creates a new Polygon from the supplied latitude/longitude array, and optionally any holes.

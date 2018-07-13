@@ -24,8 +24,8 @@ import org.apache.lucene.util.BitUtil;
 
 import static java.lang.Math.max;
 import static java.lang.Math.min;
-import static org.apache.lucene.geo.GeoEncodingUtils.encodeLatitudeCeil;
-import static org.apache.lucene.geo.GeoEncodingUtils.encodeLongitudeCeil;
+import static org.apache.lucene.geo.GeoEncodingUtils.encodeLatitude;
+import static org.apache.lucene.geo.GeoEncodingUtils.encodeLongitude;
 import static org.apache.lucene.geo.GeoUtils.orient;
 
 /**
@@ -109,59 +109,32 @@ final public class Tessellator {
         sortByMorton(outerNode);
       }
     }
-
     // Calculate the tessellation using the doubly LinkedList.
-    return earcutLinkedList(outerNode, new ArrayList<>(), State.INIT, mortonOptimized);
-  }
-
-  /** utility method to ensure we are not inserting duplicate sequential points */
-  private static final int ensureNoDuplicatesFWD(final Polygon polygon, int index, Node lastNode) {
-    while (polygon.getPolyLat(index) == lastNode.getY() && polygon.getPolyLon(index) == lastNode.getX()) {
-      ++index;
+    List<Triangle> result = earcutLinkedList(outerNode, new ArrayList<>(), State.INIT, mortonOptimized);
+    if (result.size() == 0) {
+      throw new IllegalArgumentException("Unable to Tessellate shape [" + polygon + "]. Possible malformed shape detected.");
     }
-    return index;
-  }
 
-  /** utility method to ensure we are not inserting duplicate sequential points */
-  private static final int ensureNoDuplicatesReverse(final Polygon polygon, int index, Node lastNode) {
-    while (polygon.getPolyLat(index) == lastNode.getY() && polygon.getPolyLon(index) == lastNode.getX()) {
-      --index;
-    }
-    return index;
+    return result;
   }
 
   /** Creates a circular doubly linked list using polygon points. The order is governed by the specified winding order */
   private static final Node createDoublyLinkedList(final Polygon polygon, final WindingOrder windingOrder) {
     Node lastNode = null;
-    int i;
-
     // Link points into the circular doubly-linked list in the specified winding order
     if (windingOrder == polygon.getWindingOrder()) {
-      i = 0;
-      lastNode = insertNode(polygon, i++, lastNode);
-      i = ensureNoDuplicatesFWD(polygon, i, lastNode);
-      lastNode = insertNode(polygon, i++, lastNode);
-      i = ensureNoDuplicatesFWD(polygon, i, lastNode);
-      lastNode = insertNode(polygon, i++, lastNode);
-      for(; i < polygon.numPoints(); ++i) {
+      for (int i = 0; i < polygon.numPoints(); ++i) {
         if (lastNode == null || filter(polygon, i, lastNode) == false) {
           lastNode = insertNode(polygon, i, lastNode);
         }
       }
     } else {
-      i = polygon.numPoints() - 1;
-      lastNode = insertNode(polygon, i--, lastNode);
-      i = ensureNoDuplicatesReverse(polygon, i, lastNode);
-      lastNode = insertNode(polygon, i--, lastNode);
-      i = ensureNoDuplicatesReverse(polygon, i, lastNode);
-      lastNode = insertNode(polygon, i--, lastNode);
-      for(; i >= 0; --i) {
+      for (int i = polygon.numPoints() - 1; i >= 0; --i) {
         if (lastNode == null || filter(polygon, i, lastNode) == false) {
           lastNode = insertNode(polygon, i, lastNode);
         }
       }
     }
-
     // if first and last node are the same then remove the end node and set lastNode to the start
     if (lastNode != null && isVertexEquals(lastNode, lastNode.next)) {
       removeNode(lastNode);
@@ -649,8 +622,10 @@ final public class Tessellator {
     final double x = polygon.getPolyLon(i);
     final double y = polygon.getPolyLat(i);
     final boolean equal = (x == node.getX() && y == node.getY());
-    if (equal || node.previous == null || node.previous.previous == null) {
-      return equal;
+    if (equal == true) {
+      return true;
+    } else if (node.previous == node || node.previous.previous == node) {
+      return false;
     }
     return area(node.previous.previous.getX(), node.previous.previous.getY(), node.previous.getX(), node.previous.getY(), x, y) == 0d;
   }
@@ -758,10 +733,10 @@ final public class Tessellator {
   /** Brute force compute if a point is in the polygon by traversing entire triangulation
    * todo: speed this up using either binary tree or prefix coding (filtering by bounding box of triangle)
    **/
-  public static final boolean pointInPolygon(final List<Triangle> tessellation, double x, double y) {
+  public static final boolean pointInPolygon(final List<Triangle> tessellation, double lat, double lon) {
     // each triangle
     for (int i = 0; i < tessellation.size(); ++i) {
-      if (tessellation.get(i).containsPoint((int)x, (int)y)) { //encodeLongitude(x), encodeLatitude(y))) {
+      if (tessellation.get(i).containsPoint(lat, lon)) {
         return true;
       }
     }
@@ -769,7 +744,7 @@ final public class Tessellator {
   }
 
   /** Circular Doubly-linked list used for polygon coordinates */
-  private static class Node {
+  protected static class Node {
     // vertex index in the polygon
     private final int idx;
     // reference to the polygon for lat/lon values
@@ -795,8 +770,8 @@ final public class Tessellator {
     protected Node(final Polygon polygon, final int index) {
       this.idx = index;
       this.polygon = polygon;
-      this.y = encodeLatitudeCeil(polygon.getPolyLat(idx));
-      this.x = encodeLongitudeCeil(polygon.getPolyLon(idx));
+      this.y = encodeLatitude(polygon.getPolyLat(idx));
+      this.x = encodeLongitude(polygon.getPolyLon(idx));
       this.morton = BitUtil.interleave(x ^ 0x80000000, y ^ 0x80000000);
       this.previous = null;
       this.next = null;
@@ -871,7 +846,7 @@ final public class Tessellator {
 
   /** Triangle in the tessellated mesh */
   public final static class Triangle {
-    final int data[][];
+    Node[] vertex = new Node[3];
 
     protected Triangle(Node a, Node b, Node c) {
       // sort nodes by morton value
@@ -894,43 +869,44 @@ final public class Tessellator {
         tA = tB;
         tB = temp;
       }
-
-      data = new int[][] {{tA.x, tA.y}, {tB.x, tB.y}, {tC.x, tC.y}};
+      this.vertex[0] = tA;
+      this.vertex[1] = tB;
+      this.vertex[2] = tC;
     }
 
-    /** get x value for first point */
-    public int getAX() {
-      return data[0][0];
+    /** get quantized x value for the given vertex */
+    public int getEncodedX(int vertex) {
+      return this.vertex[vertex].x;
     }
-    /** get y value for first point */
-    public int getAY() {
-      return data[0][1];
+
+    /** get quantized y value for the given vertex */
+    public int getEncodedY(int vertex) {
+      return this.vertex[vertex].y;
     }
-    /** get x value for second point */
-    public int getBX() {
-      return data[1][0];
+
+    /** get latitude value for the given vertex */
+    public double getLat(int vertex) {
+      return this.vertex[vertex].getLat();
     }
-    /** get y value for second point */
-    public int getBY() {
-      return data[1][1];
-    }
-    /** get x value for third point */
-    public int getCX() {
-      return data[2][0];
-    }
-    /** get y value for third point */
-    public int getCY() {
-      return data[2][1];
+
+    /** get longitude value for the given vertex */
+    public double getLon(int vertex) {
+      return this.vertex[vertex].getLon();
     }
 
     /** utility method to compute whether the point is in the triangle */
-    protected boolean containsPoint(int x, int y) {
-      return pointInTriangle(x, y, getAX(), getAY(), getBX(), getBY(), getCX(), getCY());
+    protected boolean containsPoint(double lat, double lon) {
+      return pointInTriangle(lon, lat,
+          vertex[0].getLon(), vertex[0].getLat(),
+          vertex[1].getLon(), vertex[1].getLat(),
+          vertex[2].getLon(), vertex[2].getLat());
     }
 
     /** pretty print the triangle vertices */
     public String toString() {
-      String result = getAX() + ", " + getAY() + " " + getBX() + " " + getBY() + " " + getCX() + " " + getCY();
+      String result = vertex[0].x + ", " + vertex[0].y + " " +
+                      vertex[1].x + ", " + vertex[1].y + " " +
+                      vertex[2].x + ", " + vertex[2].y;
       return result;
     }
   }

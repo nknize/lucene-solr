@@ -47,7 +47,9 @@ import org.apache.lucene.util.LuceneTestCase;
 
 import static org.apache.lucene.geo.GeoEncodingUtils.decodeLatitude;
 import static org.apache.lucene.geo.GeoEncodingUtils.decodeLongitude;
+import static org.apache.lucene.geo.GeoEncodingUtils.encodeLatitude;
 import static org.apache.lucene.geo.GeoEncodingUtils.encodeLatitudeCeil;
+import static org.apache.lucene.geo.GeoEncodingUtils.encodeLongitude;
 import static org.apache.lucene.geo.GeoEncodingUtils.encodeLongitudeCeil;
 
 /** base Test case for {@link LatLonShape} indexing and search */
@@ -57,7 +59,6 @@ public class TestLatLonShapeQueries extends LuceneTestCase {
   private Polygon quantizePolygon(Polygon polygon) {
     double[] lats = new double[polygon.numPoints()];
     double[] lons = new double[polygon.numPoints()];
-
     for (int i = 0; i < lats.length; ++i) {
       lats[i] = quantizeLat(polygon.getPolyLat(i));
       lons[i] = quantizeLon(polygon.getPolyLon(i));
@@ -66,10 +67,18 @@ public class TestLatLonShapeQueries extends LuceneTestCase {
   }
 
   protected double quantizeLat(double rawLat) {
+    return decodeLatitude(encodeLatitude(rawLat));
+  }
+
+  protected double quantizeLatCeil(double rawLat) {
     return decodeLatitude(encodeLatitudeCeil(rawLat));
   }
 
   protected double quantizeLon(double rawLon) {
+    return decodeLongitude(encodeLongitude(rawLon));
+  }
+
+  protected double quantizeLonCeil(double rawLon) {
     return decodeLongitude(encodeLongitudeCeil(rawLon));
   }
 
@@ -99,7 +108,7 @@ public class TestLatLonShapeQueries extends LuceneTestCase {
   }
 
   private void doTestRandom(int count) throws Exception {
-    int numPolygons = atLeast(count);;
+    int numPolygons = atLeast(count);
 
     if (VERBOSE) {
       System.out.println("TEST: numPolygons=" + numPolygons);
@@ -147,7 +156,20 @@ public class TestLatLonShapeQueries extends LuceneTestCase {
       doc.add(newStringField("id", "" + id, Field.Store.NO));
       doc.add(new NumericDocValuesField("id", id));
       if (polygons[id] != null) {
-        addPolygonsToDoc(FIELD_NAME, doc, polygons[id]);
+        try {
+          addPolygonsToDoc(FIELD_NAME, doc, polygons[id]);
+        } catch (IllegalArgumentException e) {
+          // GeoTestUtil will occassionally create invalid polygons
+          // invalid polygons will not tessellate
+          // we skip those polygons that will not tessellate, relying on the TestTessellator class
+          // to ensure the Tessellator correctly identified a malformed shape and its not a bug
+          if (VERBOSE) {
+            System.out.println("  id=" + id + " could not tessellate. Malformed shape " + polygons[id] + " detected");
+          }
+          // remove and skip the malformed shape
+          polygons[id] = null;
+          continue;
+        }
         poly2D[id] = Polygon2D.create(quantizePolygon(polygons[id]));
       }
       w.addDocument(doc);
@@ -176,7 +198,7 @@ public class TestLatLonShapeQueries extends LuceneTestCase {
 
     for (int iter = 0; iter < iters; ++iter) {
       if (VERBOSE) {
-        System.out.println("\nTEST: iter=" + iter+1 + " of " + iters + " s=" + s);
+        System.out.println("\nTEST: iter=" + (iter+1) + " of " + iters + " s=" + s);
       }
 
       // BBox
@@ -221,7 +243,8 @@ public class TestLatLonShapeQueries extends LuceneTestCase {
           expected = false;
         } else {
           // check quantized poly against quantized query
-          expected = poly2D[id].relate(quantizeLat(rect.minLat), quantizeLat(rect.maxLat), quantizeLon(rect.minLon), quantizeLon(rect.maxLon)) != Relation.CELL_OUTSIDE_QUERY;
+          expected = poly2D[id].relate(quantizeLatCeil(rect.minLat), quantizeLat(rect.maxLat),
+              quantizeLonCeil(rect.minLon), quantizeLon(rect.maxLon)) != Relation.CELL_OUTSIDE_QUERY;
         }
 
         if (hits.get(docID) != expected) {
@@ -233,9 +256,9 @@ public class TestLatLonShapeQueries extends LuceneTestCase {
             b.append("FAIL: id=" + id + " should not match but did\n");
           }
           b.append("  query=" + query + " docID=" + docID + "\n");
-          b.append("  polygon=" + polygons[id] + "\n");
+          b.append("  polygon=" + quantizePolygon(polygons[id]) + "\n");
           b.append("  deleted?=" + (liveDocs != null && liveDocs.get(docID) == false));
-          b.append("  rect=" + rect);
+          b.append("  rect=Rectangle(" + quantizeLatCeil(rect.minLat) + " TO " + quantizeLat(rect.maxLat) + " lon=" + quantizeLonCeil(rect.minLon) + " TO " + quantizeLon(rect.maxLon) + ")");
           if (true) {
             fail("wrong hit (first of possibly more):\n\n" + b);
           } else {

@@ -128,28 +128,4 @@ public class TestLatLonShape extends LuceneTestCase {
     writer.close();
     dir.close();
   }
-
-  public void testSVG() throws Exception {
-    Polygon p1 = GeoTestUtil.createRegularPolygon(0, 90, atLeast(1000000), 300000);
-    Polygon p2 = GeoTestUtil.createRegularPolygon(0, -90, atLeast(1000000), 300000);
-    PrintWriter writer = new PrintWriter("poly.svg", "UTF-8");
-    List<Tessellator.Triangle> tessellation = Tessellator.tessellate(p1);
-    tessellation.addAll(Tessellator.tessellate(p2));
-    writer.println(toSVG(tessellation, new Polygon(new double[] {-1d, -1d, 1d, 1d, -1d},
-        new double[] {89d, 91d, 91d, 89d, 89d})));
-    writer.close();
-  }
-
-  public static String toSVG(List<Tessellator.Triangle> tessellation, Polygon box) {
-    Polygon[] polygons = new Polygon[tessellation.size()];
-    // convert tessellation triangles to list of Polygons
-    Tessellator.Triangle t;
-    for (int i = 0; i < tessellation.size(); ++i) {
-      t = tessellation.get(i);
-      polygons[i] = new Polygon(
-          new double[]{decodeLatitude(t.getAY()), decodeLatitude(t.getBY()), decodeLatitude(t.getCY()), decodeLatitude(t.getAY())},
-          new double[]{decodeLongitude(t.getAX()), decodeLongitude(t.getBX()), decodeLongitude(t.getCX()), decodeLongitude(t.getAX())});
-    }
-    return GeoTestUtil.toSVG(polygons, box);
-  }
 }

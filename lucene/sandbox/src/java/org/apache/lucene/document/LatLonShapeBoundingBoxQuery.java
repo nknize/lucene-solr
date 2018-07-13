@@ -14,13 +14,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.lucene.search;
+package org.apache.lucene.document;
 
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.Objects;
 
-import org.apache.lucene.document.LatLonPoint;
 import org.apache.lucene.geo.Polygon;
 import org.apache.lucene.geo.Tessellator;
 import org.apache.lucene.index.LeafReader;
@@ -28,6 +27,15 @@ import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.index.PointValues;
 import org.apache.lucene.index.PointValues.IntersectVisitor;
 import org.apache.lucene.index.PointValues.Relation;
+import org.apache.lucene.search.ConstantScoreScorer;
+import org.apache.lucene.search.ConstantScoreWeight;
+import org.apache.lucene.search.DocIdSetIterator;
+import org.apache.lucene.search.IndexSearcher;
+import org.apache.lucene.search.Query;
+import org.apache.lucene.search.ScoreMode;
+import org.apache.lucene.search.Scorer;
+import org.apache.lucene.search.ScorerSupplier;
+import org.apache.lucene.search.Weight;
 import org.apache.lucene.util.BitSetIterator;
 import org.apache.lucene.util.DocIdSetBuilder;
 import org.apache.lucene.util.FixedBitSet;
@@ -36,7 +44,9 @@ import org.apache.lucene.util.NumericUtils;
 
 import static org.apache.lucene.geo.GeoEncodingUtils.decodeLatitude;
 import static org.apache.lucene.geo.GeoEncodingUtils.decodeLongitude;
+import static org.apache.lucene.geo.GeoEncodingUtils.encodeLatitude;
 import static org.apache.lucene.geo.GeoEncodingUtils.encodeLatitudeCeil;
+import static org.apache.lucene.geo.GeoEncodingUtils.encodeLongitude;
 import static org.apache.lucene.geo.GeoEncodingUtils.encodeLongitudeCeil;
 
 /**
@@ -47,7 +57,7 @@ import static org.apache.lucene.geo.GeoEncodingUtils.encodeLongitudeCeil;
  *
  *  @lucene.experimental
  **/
-public class LatLonShapeBoundingBoxQuery extends Query {
+class LatLonShapeBoundingBoxQuery extends Query {
   final String field;
   final byte[] bbox;
   final int minX;
@@ -56,12 +66,15 @@ public class LatLonShapeBoundingBoxQuery extends Query {
   final int maxY;
 
   public LatLonShapeBoundingBoxQuery(String field, double minLat, double maxLat, double minLon, double maxLon) {
+    if (minLon > maxLon) {
+      throw new IllegalArgumentException("dateline crossing bounding box queries are not supported for [" + field + "]");
+    }
     this.field = field;
     this.bbox = new byte[4 * LatLonPoint.BYTES];
     this.minX = encodeLongitudeCeil(minLon);
-    this.maxX = encodeLongitudeCeil(maxLon);
+    this.maxX = encodeLongitude(maxLon);
     this.minY = encodeLatitudeCeil(minLat);
-    this.maxY = encodeLatitudeCeil(maxLat);
+    this.maxY = encodeLatitude(maxLat);
     NumericUtils.intToSortableBytes(this.minY, this.bbox, 0);
     NumericUtils.intToSortableBytes(this.minX, this.bbox, LatLonPoint.BYTES);
     NumericUtils.intToSortableBytes(this.maxY, this.bbox, 2 * LatLonPoint.BYTES);
@@ -361,11 +374,6 @@ public class LatLonShapeBoundingBoxQuery extends Query {
   }
 
   @Override
-  public String toString(String field) {
-    return null;
-  }
-
-  @Override
   public boolean equals(Object o) {
     return sameClassAs(o) && equalsTo(getClass().cast(o));
   }
@@ -383,13 +391,25 @@ public class LatLonShapeBoundingBoxQuery extends Query {
     return hash;
   }
 
-  public String printTriangle(byte[] bytes) {
-    double aLat = decodeLatitude(NumericUtils.sortableBytesToInt(bytes, 0));
-    double aLon = decodeLongitude(NumericUtils.sortableBytesToInt(bytes, LatLonPoint.BYTES));
-    double bLat = decodeLatitude(NumericUtils.sortableBytesToInt(bytes, 2 * LatLonPoint.BYTES));
-    double bLon = decodeLongitude(NumericUtils.sortableBytesToInt(bytes, 3 * LatLonPoint.BYTES));
-    double cLat = decodeLatitude(NumericUtils.sortableBytesToInt(bytes, 4 * LatLonPoint.BYTES));
-    double cLon = decodeLongitude(NumericUtils.sortableBytesToInt(bytes, 5 * LatLonPoint.BYTES));
-    return "[" + aLat + ", " + aLon + "    " + bLat + ", " + bLon + "    " + cLat + ", " + cLon + "]";
+  @Override
+  public String toString(String field) {
+    final StringBuilder sb = new StringBuilder();
+    sb.append(getClass().getSimpleName());
+    sb.append(':');
+    if (this.field.equals(field) == false) {
+      sb.append(" field=");
+      sb.append(this.field);
+      sb.append(':');
+    }
+    sb.append("Rectangle(lat=");
+    sb.append(decodeLatitude(minY));
+    sb.append(" TO ");
+    sb.append(decodeLatitude(maxY));
+    sb.append(" lon=");
+    sb.append(decodeLongitude(minX));
+    sb.append(" TO ");
+    sb.append(decodeLongitude(maxX));
+    sb.append(")");
+    return sb.toString();
   }
 }
