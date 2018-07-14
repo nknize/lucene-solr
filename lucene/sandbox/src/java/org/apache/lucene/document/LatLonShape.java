@@ -32,7 +32,6 @@ import org.apache.lucene.util.NumericUtils;
  * <p>
  * {@link Polygon}'s are decomposed into a triangular mesh using the {@link Tessellator} utility class
  * Each {@link Triangle} is encoded and indexed as a multi-value field.
- *
  * <p>
  * Finding all shapes that intersect a range (e.g., bounding box) at search time is efficient.
  * <p>
@@ -42,7 +41,7 @@ import org.apache.lucene.util.NumericUtils;
  *   <li>{@link #newBoxQuery newBoxQuery()} for matching polygons that intersect a bounding box.
  * </ul>
 
- * <b>WARNING</b>: Like {@LatLonPoint}, vertex values are indexed with some loss of precision from the
+ * <b>WARNING</b>: Like {@link LatLonPoint}, vertex values are indexed with some loss of precision from the
  * original {@code double} values (4.190951585769653E-8 for the latitude component
  * and 8.381903171539307E-8 for longitude).
  * @see PointValues
@@ -75,7 +74,7 @@ public class LatLonShape {
 
   /** create a query to find all polygons that intersect a defined bounding box
    *  note: does not currently support dateline crossing boxes
-   * @todo split dateline crossing boxes into two queries like {@link LatLonPoint#newBoxQuery}
+   * todo split dateline crossing boxes into two queries like {@link LatLonPoint#newBoxQuery}
    **/
   public static Query newBoxQuery(String field, double minLatitude, double maxLatitude, double minLongitude, double maxLongitude) {
     return new LatLonShapeBoundingBoxQuery(field, minLatitude, maxLatitude, minLongitude, maxLongitude);

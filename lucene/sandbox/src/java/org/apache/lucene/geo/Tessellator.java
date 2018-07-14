@@ -35,26 +35,27 @@ import static org.apache.lucene.geo.GeoUtils.orient;
  * written by David Eberly.
  * <p>
  * Notes:
- * <p>
  *   <ul>
  *     <li>Requires valid polygons:
  *       <ul>
  *         <li>No self intersections
  *         <li>Holes may only touch at one vertex
- *         <li>Polygon must have an area (no "line" boxes)
+ *         <li>Polygon must have an area (e.g., no "line" boxes)
  *      <li>sensitive to overflow (e.g, subatomic values such as E-200 can cause unexpected behavior)
- *
+ *      </ul>
+ *  </ul>
+ * <p>
  * The code is a modified version of the javascript implementation provided by MapBox
  * under the following license:
- *
+ * <p>
  * ISC License
- *
+ * <p>
  * Copyright (c) 2016, Mapbox
- *
+ * <p>
  * Permission to use, copy, modify, and/or distribute this software for any purpose
  * with or without fee is hereby granted, provided that the above copyright notice
  * and this permission notice appear in all copies.
- *
+ * <p>
  * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH'
  * REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND
  * FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT,
