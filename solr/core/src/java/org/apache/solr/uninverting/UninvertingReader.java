@@ -242,7 +242,7 @@ public class UninvertingReader extends FilterLeafReader {
         if (t != null) {
           if (t == Type.INTEGER_POINT || t == Type.LONG_POINT || t == Type.FLOAT_POINT || t == Type.DOUBLE_POINT) {
             // type uses points
-            if (fi.getPointDimensionCount() == 0) {
+            if (fi.getPointDataDimensionCount() == 0) {
               continue;
             }
           } else {
@@ -282,7 +282,7 @@ public class UninvertingReader extends FilterLeafReader {
       }
       filteredInfos.add(new FieldInfo(fi.name, fi.number, fi.hasVectors(), fi.omitsNorms(),
           fi.hasPayloads(), fi.getIndexOptions(), type, fi.getDocValuesGen(), fi.attributes(),
-          fi.getPointDimensionCount(), fi.getPointNumBytes(), fi.isSoftDeletesField()));
+          fi.getPointDataDimensionCount(), fi.getPointIndexDimensionCount(), fi.getPointNumBytes(), fi.isSoftDeletesField()));
     }
     fieldInfos = new FieldInfos(filteredInfos.toArray(new FieldInfo[filteredInfos.size()]));
   }
