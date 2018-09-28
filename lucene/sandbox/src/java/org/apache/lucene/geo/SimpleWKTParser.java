@@ -108,8 +108,8 @@ public class SimpleWKTParser {
 
   private static void parseCoordinate(StreamTokenizer stream, ArrayList lats, ArrayList lons)
       throws IOException, ParseException {
-    lats.add(nextNumber(stream));
     lons.add(nextNumber(stream));
+    lats.add(nextNumber(stream));
     if (isNumberNext(stream)) {
       nextNumber(stream);
     }
