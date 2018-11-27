@@ -41,15 +41,15 @@ import org.apache.lucene.search.ScoreMode;
 import org.apache.lucene.search.Scorer;
 import org.apache.lucene.search.TwoPhaseIterator;
 import org.apache.lucene.search.Weight;
+import org.apache.lucene.spatial.SpatialContext;
 import org.apache.lucene.spatial.SpatialStrategy;
+import org.apache.lucene.spatial.geometry.GeoCircle;
+import org.apache.lucene.spatial.geometry.Geometry;
+import org.apache.lucene.spatial.geometry.Point;
+import org.apache.lucene.spatial.geometry.Rectangle;
 import org.apache.lucene.spatial.query.SpatialArgs;
 import org.apache.lucene.spatial.query.SpatialOperation;
 import org.apache.lucene.spatial.query.UnsupportedSpatialOperation;
-import org.locationtech.spatial4j.context.SpatialContext;
-import org.locationtech.spatial4j.shape.Circle;
-import org.locationtech.spatial4j.shape.Point;
-import org.locationtech.spatial4j.shape.Rectangle;
-import org.locationtech.spatial4j.shape.Shape;
 
 /**
  * Simple {@link SpatialStrategy} which represents Points in two numeric fields.
@@ -62,10 +62,10 @@ import org.locationtech.spatial4j.shape.Shape;
  * <li>Only indexes points; just one per field value.</li>
  * <li>Can query by a rectangle or circle.</li>
  * <li>{@link
- * org.apache.lucene.spatial.query.SpatialOperation#Intersects} and {@link
- * SpatialOperation#IsWithin} is supported.</li>
+ * SpatialOperation#INTERSECTS} and {@link
+ * SpatialOperation#WITHIN} is supported.</li>
  * <li>Requires DocValues for
- * {@link #makeDistanceValueSource(org.locationtech.spatial4j.shape.Point)} and for
+ * {@link #makeDistanceValueSource(Point)} and for
  * searching with a Circle.</li>
  * </ul>
  *
@@ -75,7 +75,7 @@ import org.locationtech.spatial4j.shape.Shape;
  * This is a simple Strategy.  Search works with a pair of range queries on two {@link DoublePoint}s representing
  * x &amp; y fields.  A Circle query does the same bbox query but adds a
  * ValueSource filter on
- * {@link #makeDistanceValueSource(org.locationtech.spatial4j.shape.Point)}.
+ * {@link #makeDistanceValueSource(Point)}.
  * <p>
  * One performance shortcoming with this strategy is that a scenario involving
  * both a search using a Circle and sort will result in calculations for the
@@ -155,27 +155,27 @@ public class PointVectorStrategy extends SpatialStrategy {
   }
 
   @Override
-  public Field[] createIndexableFields(Shape shape) {
+  public Field[] createIndexableFields(Geometry shape) {
     if (shape instanceof Point)
       return createIndexableFields((Point) shape);
     throw new UnsupportedOperationException("Can only index Point, not " + shape);
   }
 
-  /** @see #createIndexableFields(org.locationtech.spatial4j.shape.Shape) */
+  /** @see #createIndexableFields(Geometry) */
   public Field[] createIndexableFields(Point point) {
     Field[] fields = new Field[fieldsLen];
     int idx = -1;
     if (hasStored) {
-      fields[++idx] = new StoredField(fieldNameX, point.getX());
-      fields[++idx] = new StoredField(fieldNameY, point.getY());
+      fields[++idx] = new StoredField(fieldNameX, point.x());
+      fields[++idx] = new StoredField(fieldNameY, point.y());
     }
     if (hasDocVals) {
-      fields[++idx] = new DoubleDocValuesField(fieldNameX, point.getX());
-      fields[++idx] = new DoubleDocValuesField(fieldNameY, point.getY());
+      fields[++idx] = new DoubleDocValuesField(fieldNameX, point.x());
+      fields[++idx] = new DoubleDocValuesField(fieldNameY, point.y());
     }
     if (hasPointVals) {
-      fields[++idx] = new DoublePoint(fieldNameX, point.getX());
-      fields[++idx] = new DoublePoint(fieldNameY, point.getY());
+      fields[++idx] = new DoublePoint(fieldNameX, point.x());
+      fields[++idx] = new DoublePoint(fieldNameY, point.y());
     }
     assert idx == fields.length - 1;
     return fields;
@@ -188,18 +188,18 @@ public class PointVectorStrategy extends SpatialStrategy {
 
   @Override
   public Query makeQuery(SpatialArgs args) {
-    if(! SpatialOperation.is( args.getOperation(),
-        SpatialOperation.Intersects,
-        SpatialOperation.IsWithin ))
+    if (args.getOperation() != SpatialOperation.INTERSECTS
+        || args.getOperation() != SpatialOperation.WITHIN) {
       throw new UnsupportedSpatialOperation(args.getOperation());
-    Shape shape = args.getShape();
+    }
+    Geometry shape = args.getShape();
     if (shape instanceof Rectangle) {
       Rectangle bbox = (Rectangle) shape;
       return new ConstantScoreQuery(makeWithin(bbox));
-    } else if (shape instanceof Circle) {
-      Circle circle = (Circle)shape;
+    } else if (shape instanceof GeoCircle) {
+      GeoCircle circle = (GeoCircle)shape;
       Rectangle bbox = circle.getBoundingBox();
-      return new DistanceRangeQuery(makeWithin(bbox), makeDistanceValueSource(circle.getCenter()), circle.getRadius());
+      return new DistanceRangeQuery(makeWithin(bbox), makeDistanceValueSource(circle.center()), circle.getRadiusMeters());
     } else {
       throw new UnsupportedOperationException("Only Rectangles and Circles are currently supported, " +
           "found [" + shape.getClass() + "]");//TODO
@@ -212,15 +212,15 @@ public class PointVectorStrategy extends SpatialStrategy {
   private Query makeWithin(Rectangle bbox) {
     BooleanQuery.Builder bq = new BooleanQuery.Builder();
     BooleanClause.Occur MUST = BooleanClause.Occur.MUST;
-    if (bbox.getCrossesDateLine()) {
+    if (bbox.left() > bbox.right()) {
       //use null as performance trick since no data will be beyond the world bounds
-      bq.add(rangeQuery(fieldNameX, null/*-180*/, bbox.getMaxX()), BooleanClause.Occur.SHOULD );
-      bq.add(rangeQuery(fieldNameX, bbox.getMinX(), null/*+180*/), BooleanClause.Occur.SHOULD );
+      bq.add(rangeQuery(fieldNameX, null/*-180*/, bbox.right()), BooleanClause.Occur.SHOULD );
+      bq.add(rangeQuery(fieldNameX, bbox.left(), null/*+180*/), BooleanClause.Occur.SHOULD );
       bq.setMinimumNumberShouldMatch(1);//must match at least one of the SHOULD
     } else {
-      bq.add(rangeQuery(fieldNameX, bbox.getMinX(), bbox.getMaxX()), MUST);
+      bq.add(rangeQuery(fieldNameX, bbox.left(), bbox.right()), MUST);
     }
-    bq.add(rangeQuery(fieldNameY, bbox.getMinY(), bbox.getMaxY()), MUST);
+    bq.add(rangeQuery(fieldNameY, bbox.bottom(), bbox.top()), MUST);
     return bq.build();
   }
 

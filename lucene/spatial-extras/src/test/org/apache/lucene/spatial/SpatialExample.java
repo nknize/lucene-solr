@@ -22,6 +22,11 @@ import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field;
 import org.apache.lucene.document.NumericDocValuesField;
 import org.apache.lucene.document.StoredField;
+import org.apache.lucene.geo.GeoUtils;
+import org.apache.lucene.geo.geometry.Circle;
+import org.apache.lucene.geo.geometry.GeoShape;
+import org.apache.lucene.geo.geometry.Point;
+import org.apache.lucene.geo.parsers.WKTParser;
 import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.index.IndexWriter;
@@ -42,10 +47,6 @@ import org.apache.lucene.spatial.query.SpatialOperation;
 import org.apache.lucene.store.Directory;
 import org.apache.lucene.store.RAMDirectory;
 import org.apache.lucene.util.LuceneTestCase;
-import org.locationtech.spatial4j.context.SpatialContext;
-import org.locationtech.spatial4j.distance.DistanceUtils;
-import org.locationtech.spatial4j.shape.Point;
-import org.locationtech.spatial4j.shape.Shape;
 
 /**
  * This class serves as example code to show how to use the Lucene spatial
@@ -68,7 +69,7 @@ public class SpatialExample extends LuceneTestCase {
   /**
    * The Spatial4j {@link SpatialContext} is a sort of global-ish singleton
    * needed by Lucene spatial.  It's a facade to the rest of Spatial4j, acting
-   * as a factory for {@link Shape}s and provides access to reading and writing
+   * as a factory for {@link GeoShape}s and provides access to reading and writing
    * them from Strings.
    */
   private SpatialContext ctx;//"ctx" is the conventional variable name
@@ -106,32 +107,32 @@ public class SpatialExample extends LuceneTestCase {
 
     //Spatial4j is x-y order for arguments
     indexWriter.addDocument(newSampleDocument(
-        2, ctx.makePoint(-80.93, 33.77)));
+        2, new Point(33.77, -80.93)));
 
     //Spatial4j has a WKT parser which is also "x y" order
     indexWriter.addDocument(newSampleDocument(
-        4, ctx.readShapeFromWkt("POINT(60.9289094 -50.7693246)")));
+        4, WKTParser.parse("POINT(60.9289094 -50.7693246)")));
 
     indexWriter.addDocument(newSampleDocument(
-        20, ctx.makePoint(0.1,0.1), ctx.makePoint(0, 0)));
+        20, new Point(0.1,0.1), new Point(0, 0)));
 
     indexWriter.close();
   }
 
-  private Document newSampleDocument(int id, Shape... shapes) {
+  private Document newSampleDocument(int id, GeoShape... shapes) {
     Document doc = new Document();
     doc.add(new StoredField("id", id));
     doc.add(new NumericDocValuesField("id", id));
     //Potentially more than one shape in this field is supported by some
     // strategies; see the javadocs of the SpatialStrategy impl to see.
-    for (Shape shape : shapes) {
+    for (GeoShape shape : shapes) {
       for (Field f : strategy.createIndexableFields(shape)) {
         doc.add(f);
       }
       //store it too; the format is up to you
       //  (assume point in this example)
       Point pt = (Point) shape;
-      doc.add(new StoredField(strategy.getFieldName(), pt.getX()+" "+pt.getY()));
+      doc.add(new StoredField(strategy.getFieldName(), pt.lon()+" "+pt.lat()));
     }
 
     return doc;
@@ -146,8 +147,8 @@ public class SpatialExample extends LuceneTestCase {
     {
       //Search with circle
       //note: SpatialArgs can be parsed from a string
-      SpatialArgs args = new SpatialArgs(SpatialOperation.Intersects,
-          ctx.makeCircle(-80.0, 33.0, DistanceUtils.dist2Degrees(200, DistanceUtils.EARTH_MEAN_RADIUS_KM)));
+      SpatialArgs args = new SpatialArgs(SpatialOperation.INTERSECTS,
+          new Circle(-80.0, 33.0, GeoUtils.distanceToDegrees(200, GeoUtils.EARTH_MEAN_RADIUS_METERS / 1000d)));
       Query query = strategy.makeQuery(args);
       TopDocs docs = indexSearcher.search(query, 10, idSort);
       assertDocMatchedIds(indexSearcher, docs, 2);
@@ -159,15 +160,16 @@ public class SpatialExample extends LuceneTestCase {
       int spaceIdx = doc1Str.indexOf(' ');
       double x = Double.parseDouble(doc1Str.substring(0, spaceIdx));
       double y = Double.parseDouble(doc1Str.substring(spaceIdx+1));
-      double doc1DistDEG = ctx.calcDistance(args.getShape().getCenter(), x, y);
-      assertEquals(121.6d, DistanceUtils.degrees2Dist(doc1DistDEG, DistanceUtils.EARTH_MEAN_RADIUS_KM), 0.1);
+      Point cntr = args.getShape().getCenter();
+      double doc1DistDEG =  SpatialContext.calculateDistance(cntr.lat(), cntr.lon(), y, x);
+      assertEquals(121.6d, GeoUtils.degreesToDistance(doc1DistDEG, GeoUtils.EARTH_MEAN_RADIUS_METERS / 1000d), 0.1);
       //or more simply:
-      assertEquals(121.6d, doc1DistDEG * DistanceUtils.DEG_TO_KM, 0.1);
+      assertEquals(121.6d, doc1DistDEG * GeoUtils.DEG_TO_METERS / 1000d, 0.1);
     }
     //--Match all, order by distance ascending
     {
-      Point pt = ctx.makePoint(60, -50);
-      DoubleValuesSource valueSource = strategy.makeDistanceValueSource(pt, DistanceUtils.DEG_TO_KM);//the distance (in km)
+      Point pt = new Point(-50, 60);
+      DoubleValuesSource valueSource = strategy.makeDistanceValueSource(pt, GeoUtils.DEG_TO_METERS / 1000d);//the distance (in km)
       Sort distSort = new Sort(valueSource.getSortField(false)).rewrite(indexSearcher);//false=asc dist
       TopDocs docs = indexSearcher.search(new MatchAllDocsQuery(), 10, distSort);
       assertDocMatchedIds(indexSearcher, docs, 4, 20, 2);
@@ -180,8 +182,8 @@ public class SpatialExample extends LuceneTestCase {
     }
     //demo arg parsing
     {
-      SpatialArgs args = new SpatialArgs(SpatialOperation.Intersects,
-          ctx.makeCircle(-80.0, 33.0, 1));
+      SpatialArgs args = new SpatialArgs(SpatialOperation.INTERSECTS,
+          new Circle(-80.0, 33.0, 1));
       SpatialArgs args2 = new SpatialArgsParser().parse("Intersects(BUFFER(POINT(-80 33),1))", ctx);
       assertEquals(args.toString(),args2.toString());
     }

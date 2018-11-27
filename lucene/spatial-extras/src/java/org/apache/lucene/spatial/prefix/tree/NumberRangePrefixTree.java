@@ -16,15 +16,18 @@
  */
 package org.apache.lucene.spatial.prefix.tree;
 
+import java.io.IOException;
 import java.text.ParseException;
 
-import org.locationtech.spatial4j.context.SpatialContext;
-import org.locationtech.spatial4j.context.SpatialContextFactory;
-import org.locationtech.spatial4j.shape.Point;
-import org.locationtech.spatial4j.shape.Rectangle;
-import org.locationtech.spatial4j.shape.Shape;
-import org.locationtech.spatial4j.shape.SpatialRelation;
-import org.locationtech.spatial4j.shape.impl.RectangleImpl;
+import org.apache.lucene.spatial.SpatialContext;
+import org.apache.lucene.spatial.geometry.GeocentricGeometryFactory;
+import org.apache.lucene.spatial.geometry.Geometry;
+import org.apache.lucene.spatial.geometry.Geometry.Relation;
+import org.apache.lucene.spatial.geometry.GeometryFactory;
+import org.apache.lucene.spatial.geometry.Rectangle;
+import org.apache.lucene.spatial.geometry.Shape;
+import org.apache.lucene.spatial.geometry.ShapeType;
+import org.apache.lucene.store.OutputStreamDataOutput;
 import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.StringHelper;
 
@@ -61,24 +64,32 @@ public abstract class NumberRangePrefixTree extends SpatialPrefixTree {
 
   private static final SpatialContext DUMMY_CTX;
   static {
-    SpatialContextFactory factory = new SpatialContextFactory();
-    factory.geo = false;
-    factory.worldBounds = new RectangleImpl(Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY, 0L, 0L, null);
-    DUMMY_CTX = factory.newSpatialContext();
+    GeometryFactory geometryFactory = new GeocentricGeometryFactory(Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY, 0d, 0d) {};
+    DUMMY_CTX = new SpatialContext(geometryFactory);
   }
 
-  /** Base interface for {@link Shape}s this prefix tree supports. It extends {@link Shape} (Spatial4j) for compatibility
+  /** Base interface for {@link org.apache.lucene.spatial.geometry.Geometry}s this prefix tree supports. It extends {@link Shape} (Spatial4j) for compatibility
    * with the spatial API even though it doesn't intermix with conventional 2D shapes.
    * @lucene.experimental
    */
-  public static interface NRShape extends Shape, Cloneable {
+  public static abstract class NRShape extends Shape implements Cloneable {
     /** The result should be parseable by {@link #parseShape(String)}. */
-    abstract String toString();
+    public abstract String toString();
 
     /** Returns this shape rounded to the target level. If we are already more course than the level then the shape is
      * simply returned.  The result may refer to internal state of the argument so you may want to clone it.
      */
-    public NRShape roundToLevel(int targetLevel);
+    public abstract NRShape roundToLevel(int targetLevel);
+
+    @Override
+    protected StringBuilder contentToWKT() {
+      throw new UnsupportedOperationException("contentToWKT not supported for NRShape");
+    }
+
+    @Override
+    protected void appendWKBContent(OutputStreamDataOutput out) throws IOException {
+      throw new UnsupportedOperationException("appendWKBContent not supported for NRShape");
+    }
   }
 
   //
@@ -206,20 +217,21 @@ public abstract class NumberRangePrefixTree extends SpatialPrefixTree {
    * corresponds to a {@link Cell}.  Spatially speaking, it's analogous to a Point but 1D and has some precision width.
    * @lucene.experimental
    */
-  public static interface UnitNRShape extends NRShape, Comparable<UnitNRShape> {
+  public static abstract class UnitNRShape extends NRShape implements Comparable<UnitNRShape> {
     //note: formerly known as LevelledValue; thus some variables still use 'lv'
 
     /** Get the prefix tree level, the higher the more precise. 0 means the world (universe). */
-    int getLevel();
+    public abstract int getLevel();
     /** Gets the value at the specified level of this unit. level must be &gt;= 0 and &lt;= getLevel(). */
-    int getValAtLevel(int level);
+    public abstract int getValAtLevel(int level);
     /** Gets an ancestor at the specified level. It shares state, so you may want to clone() it. */
-    UnitNRShape getShapeAtLevel(int level);
+    public abstract UnitNRShape getShapeAtLevel(int level);
+
     @Override
-    UnitNRShape roundToLevel(int targetLevel);
+    public abstract UnitNRShape roundToLevel(int targetLevel);
 
     /** Deep clone */
-    UnitNRShape clone();
+    public abstract UnitNRShape clone();
   }
 
   /** Compares a to b, returning less than 0, 0, or greater than 0, if a is less than, equal to, or
@@ -245,7 +257,7 @@ public abstract class NumberRangePrefixTree extends SpatialPrefixTree {
    * may be confusing since even the {@link org.apache.lucene.spatial.prefix.tree.NumberRangePrefixTree.UnitNRShape}
    * is in some sense a range.
    * @lucene.experimental */
-  public class SpanUnitsNRShape implements NRShape {
+  public class SpanUnitsNRShape extends NRShape {
 
     private final UnitNRShape minLV, maxLV;
     private final int lastLevelInCommon;//computed; not part of identity
@@ -265,7 +277,6 @@ public abstract class NumberRangePrefixTree extends SpatialPrefixTree {
       lastLevelInCommon = level - 1;
     }
 
-    @Override
     public SpatialContext getContext() {
       return DUMMY_CTX;
     }
@@ -278,36 +289,49 @@ public abstract class NumberRangePrefixTree extends SpatialPrefixTree {
     private int getLevelsInCommon() { return lastLevelInCommon; }
 
     @Override
+    protected double computeArea() {
+      return Double.NaN;
+    }
+
+    @Override
+    protected Rectangle computeBoundingBox() {
+      return null;
+    }
+
+    @Override
     public NRShape roundToLevel(int targetLevel) {
       return toRangeShape(minLV.roundToLevel(targetLevel), maxLV.roundToLevel(targetLevel));
     }
 
     @Override
-    public SpatialRelation relate(Shape shape) {
-//      if (shape instanceof UnitNRShape)
-//        return relate((UnitNRShape)shape);
+    public Relation relate(double minLat, double maxLat, double minLon, double maxLon) {
+      throw new UnsupportedOperationException("relation with geo boxes are not supported");
+    }
+
+    @Override
+    public Relation relate(Geometry shape) {
       if (shape instanceof SpanUnitsNRShape)
         return relate((SpanUnitsNRShape) shape);
       return shape.relate(this).transpose();//probably a UnitNRShape
     }
 
-    public SpatialRelation relate(SpanUnitsNRShape ext) {
+    public Relation relate(SpanUnitsNRShape ext) {
       //This logic somewhat mirrors RectangleImpl.relate_range()
       int extMin_intMax = comparePrefix(ext.getMinUnit(), getMaxUnit());
       if (extMin_intMax > 0)
-        return SpatialRelation.DISJOINT;
+        return Relation.DISJOINT;
       int extMax_intMin = comparePrefix(ext.getMaxUnit(), getMinUnit());
       if (extMax_intMin < 0)
-        return SpatialRelation.DISJOINT;
+        return Relation.DISJOINT;
       int extMin_intMin = comparePrefix(ext.getMinUnit(), getMinUnit());
       int extMax_intMax = comparePrefix(ext.getMaxUnit(), getMaxUnit());
       if ((extMin_intMin > 0 || extMin_intMin == 0 && ext.getMinUnit().getLevel() >= getMinUnit().getLevel())
           && (extMax_intMax < 0 || extMax_intMax == 0 && ext.getMaxUnit().getLevel() >= getMaxUnit().getLevel()))
-        return SpatialRelation.CONTAINS;
+        return Relation.CONTAINS;
       if ((extMin_intMin < 0 || extMin_intMin == 0 && ext.getMinUnit().getLevel() <= getMinUnit().getLevel())
           && (extMax_intMax > 0 || extMax_intMax == 0 && ext.getMaxUnit().getLevel() <= getMaxUnit().getLevel()))
-        return SpatialRelation.WITHIN;
-      return SpatialRelation.INTERSECTS;
+        return Relation.WITHIN;
+      return Relation.INTERSECTS;
     }
 
     @Override
@@ -317,16 +341,9 @@ public abstract class NumberRangePrefixTree extends SpatialPrefixTree {
     public boolean hasArea() { return true; }
 
     @Override
-    public double getArea(SpatialContext spatialContext) { throw new UnsupportedOperationException(); }
-
-    @Override
-    public Point getCenter() { throw new UnsupportedOperationException(); }
-
-    @Override
-    public Shape getBuffered(double v, SpatialContext spatialContext) { throw new UnsupportedOperationException(); }
-
-    @Override
-    public boolean isEmpty() { return false; }
+    public ShapeType type() {
+      throw new UnsupportedOperationException();
+    }
 
     /** A deep clone. */
     @Override
@@ -488,7 +505,7 @@ public abstract class NumberRangePrefixTree extends SpatialPrefixTree {
    * of Cells at adjacent levels, that all have a reference back to the cell array to traverse. They also share a common
    * BytesRef for the term.
    * @lucene.internal */
-  protected class NRCell extends CellIterator implements Cell, UnitNRShape {
+  protected class NRCell extends UnitNRShape implements Cell {
 
     //Shared: (TODO put this in a new class)
     final NRCell[] cellsByLevel;
@@ -499,10 +516,11 @@ public abstract class NumberRangePrefixTree extends SpatialPrefixTree {
     final int cellLevel; // assert levelStack[cellLevel] == this
     int cellNumber; //relative to parent cell. It's unused for level 0. Starts at 0.
 
-    SpatialRelation cellShapeRel;
+    Relation cellShapeRel;
     boolean cellIsLeaf;
 
     //CellIterator state is defined further below
+    Iterator cellIterator;
 
     NRCell(NRCell[] cellsByLevel, BytesRef term, int cellLevel) {
       this.cellsByLevel = cellsByLevel;
@@ -510,6 +528,7 @@ public abstract class NumberRangePrefixTree extends SpatialPrefixTree {
       this.cellLevel = cellLevel;
       this.cellNumber = cellLevel == 0 ? 0 : -1;
       this.cellIsLeaf = false;
+      this.cellIterator = new Iterator();
       assert cellsByLevel[cellLevel] == null;
     }
 
@@ -574,6 +593,21 @@ public abstract class NumberRangePrefixTree extends SpatialPrefixTree {
       }
     }
 
+    @Override
+    public ShapeType type() {
+      throw new UnsupportedOperationException("type not supported in NRCell");
+    }
+
+    @Override
+    public Rectangle computeBoundingBox() {
+      throw new UnsupportedOperationException("computeBoundingBox not supported in NRCell");
+    }
+
+    @Override
+    public double computeArea() {
+      throw new UnsupportedOperationException("computeArea not supported in NRCell");
+    }
+
     private void assertDecoded() {
       assert cellNumber >= 0 : "Illegal state; ensureDecoded() wasn't called";
     }
@@ -584,12 +618,12 @@ public abstract class NumberRangePrefixTree extends SpatialPrefixTree {
     }
 
     @Override
-    public SpatialRelation getShapeRel() {
+    public Relation getShapeRel() {
       return cellShapeRel;
     }
 
     @Override
-    public void setShapeRel(SpatialRelation rel) {
+    public void setShapeRel(Relation rel) {
       cellShapeRel = rel;
     }
 
@@ -604,9 +638,19 @@ public abstract class NumberRangePrefixTree extends SpatialPrefixTree {
     }
 
     @Override
+    public boolean cellCanPrune() {
+      return false;
+    }
+
+    @Override
     public UnitNRShape getShape() {
       ensureDecoded();
       return this;
+    }
+
+    @Override
+    public Rectangle getRectangle() {
+      throw new UnsupportedOperationException("getRectangle not supported in NumberRangePrefixTree");
     }
 
     @Override
@@ -661,73 +705,117 @@ public abstract class NumberRangePrefixTree extends SpatialPrefixTree {
     }
 
     @Override
-    public CellIterator getNextLevelCells(Shape shapeFilter) {
+    public CellIterator getNextLevelCells(Geometry shapeFilter) {
       ensureDecoded();
       NRCell subCell = cellsByLevel[cellLevel + 1];
-      subCell.initIter(shapeFilter);
-      return subCell;
+      subCell.cellIterator.init(shapeFilter);
+      return subCell.cellIterator;
     }
 
     //----------- CellIterator
+    class Iterator extends CellIterator {
+      Geometry iterFilter;//UnitNRShape or NRShape
+      boolean iterFirstIsIntersects;
+      boolean iterLastIsIntersects;
+      int iterFirstCellNumber;
+      int iterLastCellNumber;
 
-    Shape iterFilter;//UnitNRShape or NRShape
-    boolean iterFirstIsIntersects;
-    boolean iterLastIsIntersects;
-    int iterFirstCellNumber;
-    int iterLastCellNumber;
+      protected void init(Geometry filter) {
+        cellNumber = -1;
+        if (filter instanceof UnitNRShape && ((UnitNRShape) filter).getLevel() == 0)
+          filter = null;//world means everything -- no filter
+        iterFilter = filter;
 
-    private void initIter(Shape filter) {
-      cellNumber = -1;
-      if (filter instanceof UnitNRShape && ((UnitNRShape) filter).getLevel() == 0)
-        filter = null;//world means everything -- no filter
-      iterFilter = filter;
+        NRCell parentShape = getShapeAtLevel(getLevel() - 1);
+        Iterator parentIter = parentShape.cellIterator;
 
-      NRCell parent = getShapeAtLevel(getLevel() - 1);
+        // Initialize iter* members.
 
-      // Initialize iter* members.
-
-      //no filter means all subcells
-      if (filter == null) {
-        iterFirstCellNumber = 0;
-        iterFirstIsIntersects = false;
-        iterLastCellNumber = getNumSubCells(parent) - 1;
-        iterLastIsIntersects = false;
-        return;
-      }
-
-      final UnitNRShape minLV;
-      final UnitNRShape maxLV;
-      final int lastLevelInCommon;//between minLV & maxLV
-      if (filter instanceof SpanUnitsNRShape) {
-        SpanUnitsNRShape spanShape = (SpanUnitsNRShape) iterFilter;
-        minLV = spanShape.getMinUnit();
-        maxLV = spanShape.getMaxUnit();
-        lastLevelInCommon = spanShape.getLevelsInCommon();
-      } else {
-        minLV = (UnitNRShape) iterFilter;
-        maxLV = minLV;
-        lastLevelInCommon = minLV.getLevel();
-      }
-
-      //fast path optimization that is usually true, but never first level
-      if (iterFilter == parent.iterFilter &&
-          (getLevel() <= lastLevelInCommon || parent.iterFirstCellNumber != parent.iterLastCellNumber)) {
-        //TODO benchmark if this optimization pays off. We avoid two comparePrefixLV calls.
-        if (parent.iterFirstIsIntersects && parent.cellNumber == parent.iterFirstCellNumber
-            && minLV.getLevel() >= getLevel()) {
-          iterFirstCellNumber = minLV.getValAtLevel(getLevel());
-          iterFirstIsIntersects = (minLV.getLevel() > getLevel());
-        } else {
+        //no filter means all subcells
+        if (filter == null) {
           iterFirstCellNumber = 0;
           iterFirstIsIntersects = false;
+          iterLastCellNumber = getNumSubCells(parentShape) - 1;
+          iterLastIsIntersects = false;
+          return;
         }
-        if (parent.iterLastIsIntersects && parent.cellNumber == parent.iterLastCellNumber
-            && maxLV.getLevel() >= getLevel()) {
+
+        final UnitNRShape minLV;
+        final UnitNRShape maxLV;
+        final int lastLevelInCommon;//between minLV & maxLV
+        if (filter instanceof SpanUnitsNRShape) {
+          SpanUnitsNRShape spanShape = (SpanUnitsNRShape) iterFilter;
+          minLV = spanShape.getMinUnit();
+          maxLV = spanShape.getMaxUnit();
+          lastLevelInCommon = spanShape.getLevelsInCommon();
+        } else {
+          minLV = (UnitNRShape) iterFilter;
+          maxLV = minLV;
+          lastLevelInCommon = minLV.getLevel();
+        }
+
+        //fast path optimization that is usually true, but never first level
+        if (iterFilter == parentIter.iterFilter &&
+            (getLevel() <= lastLevelInCommon || parentIter.iterFirstCellNumber != parentIter.iterLastCellNumber)) {
+          //TODO benchmark if this optimization pays off. We avoid two comparePrefixLV calls.
+          if (parentIter.iterFirstIsIntersects && parentShape.cellNumber == parentIter.iterFirstCellNumber
+              && minLV.getLevel() >= getLevel()) {
+            iterFirstCellNumber = minLV.getValAtLevel(getLevel());
+            iterFirstIsIntersects = (minLV.getLevel() > getLevel());
+          } else {
+            iterFirstCellNumber = 0;
+            iterFirstIsIntersects = false;
+          }
+          if (parentIter.iterLastIsIntersects && parentShape.cellNumber == parentIter.iterLastCellNumber
+              && maxLV.getLevel() >= getLevel()) {
+            iterLastCellNumber = maxLV.getValAtLevel(getLevel());
+            iterLastIsIntersects = (maxLV.getLevel() > getLevel());
+          } else {
+            iterLastCellNumber = getNumSubCells(parentShape) - 1;
+            iterLastIsIntersects = false;
+          }
+          if (iterFirstCellNumber == iterLastCellNumber) {
+            if (iterLastIsIntersects)
+              iterFirstIsIntersects = true;
+            else if (iterFirstIsIntersects)
+              iterLastIsIntersects = true;
+          }
+          return;
+        }
+
+        //not common to get here, except for level 1 which always happens
+
+        int startCmp = comparePrefix(minLV, parentShape);
+        if (startCmp > 0) {//start comes after this cell
+          iterFirstCellNumber = 0;
+          iterFirstIsIntersects = false;
+          iterLastCellNumber = -1;//so ends early (no cells)
+          iterLastIsIntersects = false;
+          return;
+        }
+        int endCmp = comparePrefix(maxLV, parentShape);//compare to end cell
+        if (endCmp < 0) {//end comes before this cell
+          iterFirstCellNumber = 0;
+          iterFirstIsIntersects = false;
+          iterLastCellNumber = -1;//so ends early (no cells)
+          iterLastIsIntersects = false;
+          return;
+        }
+        if (startCmp < 0 || minLV.getLevel() < getLevel()) {
+          //start comes before...
+          iterFirstCellNumber = 0;
+          iterFirstIsIntersects = false;
+        } else {
+          iterFirstCellNumber = minLV.getValAtLevel(getLevel());
+          iterFirstIsIntersects = (minLV.getLevel() > getLevel());
+        }
+        if (endCmp > 0 || maxLV.getLevel() < getLevel()) {
+          //end comes after...
+          iterLastCellNumber = getNumSubCells(parentShape) - 1;
+          iterLastIsIntersects = false;
+        } else {
           iterLastCellNumber = maxLV.getValAtLevel(getLevel());
           iterLastIsIntersects = (maxLV.getLevel() > getLevel());
-        } else {
-          iterLastCellNumber = getNumSubCells(parent) - 1;
-          iterLastIsIntersects = false;
         }
         if (iterFirstCellNumber == iterLastCellNumber) {
           if (iterLastIsIntersects)
@@ -735,80 +823,44 @@ public abstract class NumberRangePrefixTree extends SpatialPrefixTree {
           else if (iterFirstIsIntersects)
             iterLastIsIntersects = true;
         }
-        return;
       }
 
-      //not common to get here, except for level 1 which always happens
+      @Override
+      public boolean hasNext() {
+        thisCell = null;
+        if (nextCell != null)//calling hasNext twice in a row
+          return true;
 
-      int startCmp = comparePrefix(minLV, parent);
-      if (startCmp > 0) {//start comes after this cell
-        iterFirstCellNumber = 0;
-        iterFirstIsIntersects = false;
-        iterLastCellNumber = -1;//so ends early (no cells)
-        iterLastIsIntersects = false;
-        return;
-      }
-      int endCmp = comparePrefix(maxLV, parent);//compare to end cell
-      if (endCmp < 0) {//end comes before this cell
-        iterFirstCellNumber = 0;
-        iterFirstIsIntersects = false;
-        iterLastCellNumber = -1;//so ends early (no cells)
-        iterLastIsIntersects = false;
-        return;
-      }
-      if (startCmp < 0 || minLV.getLevel() < getLevel()) {
-        //start comes before...
-        iterFirstCellNumber = 0;
-        iterFirstIsIntersects = false;
-      } else {
-        iterFirstCellNumber = minLV.getValAtLevel(getLevel());
-        iterFirstIsIntersects = (minLV.getLevel() > getLevel());
-      }
-      if (endCmp > 0 || maxLV.getLevel() < getLevel()) {
-        //end comes after...
-        iterLastCellNumber = getNumSubCells(parent) - 1;
-        iterLastIsIntersects = false;
-      } else {
-        iterLastCellNumber = maxLV.getValAtLevel(getLevel());
-        iterLastIsIntersects = (maxLV.getLevel() > getLevel());
-      }
-      if (iterFirstCellNumber == iterLastCellNumber) {
-        if (iterLastIsIntersects)
-          iterFirstIsIntersects = true;
-        else if (iterFirstIsIntersects)
-          iterLastIsIntersects = true;
-      }
-    }
+        if (cellNumber >= iterLastCellNumber)
+          return false;
 
-    @Override
-    public boolean hasNext() {
-      thisCell = null;
-      if (nextCell != null)//calling hasNext twice in a row
+        resetCellWithCellNum(cellNumber < iterFirstCellNumber ? iterFirstCellNumber : cellNumber + 1);
+
+        boolean hasChildren =
+            (cellNumber == iterFirstCellNumber && iterFirstIsIntersects)
+                || (cellNumber == iterLastCellNumber && iterLastIsIntersects);
+
+        if (!hasChildren) {
+          setLeaf();
+          setShapeRel(Relation.WITHIN);
+        } else if (iterFirstCellNumber == iterLastCellNumber) {
+          setShapeRel(Relation.CONTAINS);
+        } else {
+          setShapeRel(Relation.INTERSECTS);
+        }
+
+        nextCell = NRCell.this;
         return true;
-
-      if (cellNumber >= iterLastCellNumber)
-        return false;
-
-      resetCellWithCellNum(cellNumber < iterFirstCellNumber ? iterFirstCellNumber : cellNumber + 1);
-
-      boolean hasChildren =
-          (cellNumber == iterFirstCellNumber && iterFirstIsIntersects)
-              || (cellNumber == iterLastCellNumber && iterLastIsIntersects);
-
-      if (!hasChildren) {
-        setLeaf();
-        setShapeRel(SpatialRelation.WITHIN);
-      } else if (iterFirstCellNumber == iterLastCellNumber) {
-        setShapeRel(SpatialRelation.CONTAINS);
-      } else {
-        setShapeRel(SpatialRelation.INTERSECTS);
       }
 
-      nextCell = this;
-      return true;
+      //TODO override nextFrom to be more efficient
+
     }
 
-    //TODO override nextFrom to be more efficient
+    private Iterator getIter(Geometry filter) {
+      cellIterator.init(filter);
+      return cellIterator;
+    }
 
     //----------- UnitNRShape
 
@@ -835,9 +887,9 @@ public abstract class NumberRangePrefixTree extends SpatialPrefixTree {
     }
 
     @Override
-    public SpatialRelation relate(Shape shape) {
+    public Relation relate(Geometry shape) {
       assertDecoded();
-      if (shape == iterFilter && cellShapeRel != null)
+      if (shape == cellIterator.iterFilter && cellShapeRel != null)
         return cellShapeRel;
       if (shape instanceof UnitNRShape)
         return relate((UnitNRShape)shape);
@@ -846,45 +898,50 @@ public abstract class NumberRangePrefixTree extends SpatialPrefixTree {
       return shape.relate(this).transpose();
     }
 
-    public SpatialRelation relate(UnitNRShape lv) {
+    @Override
+    public Relation relate(double minLat, double maxLat, double minLon, double maxLon) {
+      throw new UnsupportedOperationException();
+    }
+
+    public Relation relate(UnitNRShape lv) {
       assertDecoded();
       int cmp = comparePrefix(this, lv);
       if (cmp != 0)
-        return SpatialRelation.DISJOINT;
+        return Relation.DISJOINT;
       if (getLevel() > lv.getLevel())
-        return SpatialRelation.WITHIN;
-      return SpatialRelation.CONTAINS;//or equals
+        return Relation.WITHIN;
+      return Relation.CONTAINS;//or equals
       //no INTERSECTS; that won't happen.
     }
 
-    public SpatialRelation relate(SpanUnitsNRShape spanShape) {
+    public Relation relate(SpanUnitsNRShape spanShape) {
       assertDecoded();
       int startCmp = comparePrefix(spanShape.getMinUnit(), this);
       if (startCmp > 0) {//start comes after this cell
-        return SpatialRelation.DISJOINT;
+        return Relation.DISJOINT;
       }
       int endCmp = comparePrefix(spanShape.getMaxUnit(), this);
       if (endCmp < 0) {//end comes before this cell
-        return SpatialRelation.DISJOINT;
+        return Relation.DISJOINT;
       }
       int nrMinLevel = spanShape.getMinUnit().getLevel();
       int nrMaxLevel = spanShape.getMaxUnit().getLevel();
       if ((startCmp < 0 || startCmp == 0 && nrMinLevel <= getLevel())
           && (endCmp > 0 || endCmp == 0 && nrMaxLevel <= getLevel()))
-        return SpatialRelation.WITHIN;//or equals
+        return Relation.WITHIN;//or equals
       //At this point it's Contains or Within.
       if (startCmp != 0 || endCmp != 0)
-        return SpatialRelation.INTERSECTS;
+        return Relation.INTERSECTS;
       //if min or max Level is less, it might be on the equivalent edge.
       for (;nrMinLevel < getLevel(); nrMinLevel++) {
         if (getValAtLevel(nrMinLevel + 1) != 0)
-          return SpatialRelation.INTERSECTS;
+          return Relation.INTERSECTS;
       }
       for (;nrMaxLevel < getLevel(); nrMaxLevel++) {
         if (getValAtLevel(nrMaxLevel + 1) != getNumSubCells(getShapeAtLevel(nrMaxLevel)) - 1)
-          return SpatialRelation.INTERSECTS;
+          return Relation.INTERSECTS;
       }
-      return SpatialRelation.CONTAINS;
+      return Relation.CONTAINS;
     }
 
     @Override
@@ -917,24 +974,6 @@ public abstract class NumberRangePrefixTree extends SpatialPrefixTree {
       return true;
     }
 
-    @Override
-    public double getArea(SpatialContext ctx) {
-      throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public Point getCenter() {
-      throw new UnsupportedOperationException();
-    }
-
-    @Override
-    public Shape getBuffered(double distance, SpatialContext ctx) { throw new UnsupportedOperationException(); }
-
-    @Override
-    public boolean isEmpty() {
-      return false;
-    }
-
     //------- Object
 
     @Override
@@ -955,11 +994,6 @@ public abstract class NumberRangePrefixTree extends SpatialPrefixTree {
       term.length = myLastLen;
       nrCell.term.length = otherLastLen;
       return answer;
-    }
-
-    @Override
-    public SpatialContext getContext() {
-      return DUMMY_CTX;
     }
 
     @Override

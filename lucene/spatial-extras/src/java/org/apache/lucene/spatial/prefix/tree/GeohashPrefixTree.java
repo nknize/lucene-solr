@@ -20,11 +20,13 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 
-import org.locationtech.spatial4j.context.SpatialContext;
-import org.locationtech.spatial4j.io.GeohashUtils;
-import org.locationtech.spatial4j.shape.Point;
-import org.locationtech.spatial4j.shape.Rectangle;
-import org.locationtech.spatial4j.shape.Shape;
+import org.apache.lucene.geo.GeoUtils;
+import org.apache.lucene.spatial.geometry.GeoPoint;
+import org.apache.lucene.spatial.geometry.Geometry;
+import org.apache.lucene.spatial.geometry.Point;
+import org.apache.lucene.spatial.geometry.Rectangle;
+import org.apache.lucene.spatial.SpatialContext;
+import org.apache.lucene.spatial.util.GeohashUtils;
 import org.apache.lucene.util.BytesRef;
 
 /**
@@ -57,7 +59,7 @@ public class GeohashPrefixTree extends LegacyPrefixTree {
   public GeohashPrefixTree(SpatialContext ctx, int maxLevels) {
     super(ctx, maxLevels);
     Rectangle bounds = ctx.getWorldBounds();
-    if (bounds.getMinX() != -180)
+    if (bounds.left() != GeoUtils.MIN_LON_INCL)
       throw new IllegalArgumentException("Geohash only supports lat-lon world bounds. Got "+bounds);
     int MAXP = getMaxLevelsPossible();
     if (maxLevels <= 0 || maxLevels > MAXP)
@@ -84,7 +86,7 @@ public class GeohashPrefixTree extends LegacyPrefixTree {
 
   @Override
   protected Cell getCell(Point p, int level) {
-    return new GhCell(GeohashUtils.encodeLatLon(p.getY(), p.getX(), level));//args are lat,lon (y,x)
+    return new GhCell(GeohashUtils.encodeLatLon(p.y(), p.x(), level));//args are lat,lon (y,x)
   }
 
   private static byte[] stringToBytesPlus1(String token) {
@@ -144,11 +146,19 @@ public class GeohashPrefixTree extends LegacyPrefixTree {
     }
 
     @Override
-    public Shape getShape() {
+    public Geometry getShape() {
       if (shape == null) {
         shape = GeohashUtils.decodeBoundary(getGeohash(), getGrid().getSpatialContext());
       }
       return shape;
+    }
+
+    @Override
+    public Rectangle getRectangle() {
+      if (shape == null) {
+        shape = GeohashUtils.decodeBoundary(getGeohash(), getGrid().getSpatialContext());
+      }
+      return (Rectangle)shape;
     }
 
     private String getGeohash() {

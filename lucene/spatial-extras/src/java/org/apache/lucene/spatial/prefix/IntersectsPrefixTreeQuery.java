@@ -20,21 +20,21 @@ import java.io.IOException;
 
 import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.search.DocIdSet;
+import org.apache.lucene.spatial.geometry.Geometry;
+import org.apache.lucene.spatial.geometry.Geometry.Relation;
 import org.apache.lucene.spatial.prefix.tree.Cell;
 import org.apache.lucene.spatial.prefix.tree.SpatialPrefixTree;
 import org.apache.lucene.util.DocIdSetBuilder;
-import org.locationtech.spatial4j.shape.Shape;
-import org.locationtech.spatial4j.shape.SpatialRelation;
 
 /**
- * A Query matching documents that have an {@link SpatialRelation#INTERSECTS}
+ * A Query matching documents that have an {@link Relation#INTERSECTS}
  * (i.e. not DISTINCT) relationship with a provided query shape.
  *
  * @lucene.internal
  */
 public class IntersectsPrefixTreeQuery extends AbstractVisitingPrefixTreeQuery {
 
-  public IntersectsPrefixTreeQuery(Shape queryShape, String fieldName,
+  public IntersectsPrefixTreeQuery(Geometry queryShape, String fieldName,
                                    SpatialPrefixTree grid, int detailLevel,
                                    int prefixGridScanLevel) {
     super(queryShape, fieldName, grid, detailLevel, prefixGridScanLevel);
@@ -66,7 +66,7 @@ public class IntersectsPrefixTreeQuery extends AbstractVisitingPrefixTreeQuery {
 
       @Override
       protected boolean visitPrefix(Cell cell) throws IOException {
-        if (cell.getShapeRel() == SpatialRelation.WITHIN || cell.getLevel() == detailLevel) {
+        if (cell.getShapeRel() == Relation.WITHIN || cell.getLevel() == detailLevel) {
           collectDocs(results);
           return false;
         }

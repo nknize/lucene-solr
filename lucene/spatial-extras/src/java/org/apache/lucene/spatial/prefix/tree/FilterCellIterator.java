@@ -16,8 +16,9 @@
  */
 package org.apache.lucene.spatial.prefix.tree;
 
-import org.locationtech.spatial4j.shape.Shape;
-import org.locationtech.spatial4j.shape.SpatialRelation;
+import org.apache.lucene.spatial.geometry.Geometry;
+import org.apache.lucene.spatial.geometry.Geometry.Relation;
+import org.apache.lucene.spatial.geometry.Rectangle;
 
 import java.util.Iterator;
 
@@ -29,9 +30,9 @@ import java.util.Iterator;
  */
 class FilterCellIterator extends CellIterator {
   final Iterator<Cell> baseIter;
-  final Shape shapeFilter;
+  final Geometry shapeFilter;
 
-  FilterCellIterator(Iterator<Cell> baseIter, Shape shapeFilter) {
+  FilterCellIterator(Iterator<Cell> baseIter, Geometry shapeFilter) {
     this.baseIter = baseIter;
     this.shapeFilter = shapeFilter;
   }
@@ -46,10 +47,11 @@ class FilterCellIterator extends CellIterator {
       if (shapeFilter == null) {
         return true;
       } else {
-        SpatialRelation rel = nextCell.getShape().relate(shapeFilter);
-        if (rel.intersects()) {
-          nextCell.setShapeRel(rel);
-          if (rel == SpatialRelation.WITHIN)
+        Rectangle r = nextCell.getRectangle();
+        Relation rel = shapeFilter.relate(r.left(), r.right(), r.bottom(), r.top());
+        if (rel.intersects() == true) {
+          nextCell.setShapeRel(rel.transpose());
+          if (rel == Relation.CONTAINS)
             nextCell.setLeaf();
           return true;
         }

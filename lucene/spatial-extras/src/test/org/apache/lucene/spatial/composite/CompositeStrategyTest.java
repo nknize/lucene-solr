@@ -19,20 +19,19 @@ package org.apache.lucene.spatial.composite;
 import java.io.IOException;
 
 import com.carrotsearch.randomizedtesting.annotations.Repeat;
+import org.apache.lucene.geo.geometry.Circle;
+import org.apache.lucene.geo.geometry.GeoShape;
+import org.apache.lucene.geo.geometry.Point;
+import org.apache.lucene.geo.geometry.Rectangle;
+import org.apache.lucene.spatial.SpatialContext;
 import org.apache.lucene.spatial.prefix.RandomSpatialOpStrategyTestCase;
 import org.apache.lucene.spatial.prefix.RecursivePrefixTreeStrategy;
 import org.apache.lucene.spatial.prefix.tree.GeohashPrefixTree;
 import org.apache.lucene.spatial.prefix.tree.QuadPrefixTree;
 import org.apache.lucene.spatial.prefix.tree.SpatialPrefixTree;
 import org.apache.lucene.spatial.query.SpatialOperation;
-import org.apache.lucene.spatial.serialized.SerializedDVStrategy;
+import org.apache.lucene.spatial.serialized.LegacySerializedDVStrategy;
 import org.junit.Test;
-import org.locationtech.spatial4j.context.SpatialContext;
-import org.locationtech.spatial4j.context.SpatialContextFactory;
-import org.locationtech.spatial4j.shape.Point;
-import org.locationtech.spatial4j.shape.Rectangle;
-import org.locationtech.spatial4j.shape.Shape;
-import org.locationtech.spatial4j.shape.impl.RectangleImpl;
 
 import static com.carrotsearch.randomizedtesting.RandomizedTest.randomBoolean;
 import static com.carrotsearch.randomizedtesting.RandomizedTest.randomDouble;
@@ -46,10 +45,7 @@ public class CompositeStrategyTest extends RandomSpatialOpStrategyTestCase {
   private void setupQuadGrid(int maxLevels) {
     //non-geospatial makes this test a little easier (in gridSnap), and using boundary values 2^X raises
     // the prospect of edge conditions we want to test, plus makes for simpler numbers (no decimals).
-    SpatialContextFactory factory = new SpatialContextFactory();
-    factory.geo = false;
-    factory.worldBounds = new RectangleImpl(0, 256, -128, 128, null);
-    this.ctx = factory.newSpatialContext();
+    this.ctx = new SpatialContext(false, new Rectangle(-128, 128, 0, 256));
     //A fairly shallow grid
     if (maxLevels == -1)
       maxLevels = randomIntBetween(1, 8);//max 64k cells (4^8), also 256*256
@@ -82,17 +78,17 @@ public class CompositeStrategyTest extends RandomSpatialOpStrategyTestCase {
     } else {
       setupGeohashGrid(-1);
     }
-    SerializedDVStrategy serializedDVStrategy = new SerializedDVStrategy(ctx, getClass().getSimpleName() + "_sdv");
+    LegacySerializedDVStrategy legacySerializedDVStrategy = new LegacySerializedDVStrategy(ctx, getClass().getSimpleName() + "_sdv");
     this.strategy = new CompositeSpatialStrategy("composite_" + getClass().getSimpleName(),
-        rptStrategy, serializedDVStrategy);
+        rptStrategy, legacySerializedDVStrategy);
 
     //Do it!
 
     for (SpatialOperation pred : SpatialOperation.values()) {
-      if (pred == SpatialOperation.BBoxIntersects || pred == SpatialOperation.BBoxWithin) {
+      if (pred == SpatialOperation.BBOX_INTERSECTS || pred == SpatialOperation.BBOX_WITHIN) {
         continue;
       }
-      if (pred == SpatialOperation.IsDisjointTo) {//TODO
+      if (pred == SpatialOperation.DISJOINT) {//TODO
         continue;
       }
       testOperationRandomShapes(pred);
@@ -102,21 +98,21 @@ public class CompositeStrategyTest extends RandomSpatialOpStrategyTestCase {
   }
 
   @Override
-  protected Shape randomIndexedShape() {
+  protected GeoShape randomIndexedShape() {
     return randomShape();
   }
 
   @Override
-  protected Shape randomQueryShape() {
+  protected GeoShape randomQueryShape() {
     return randomShape();
   }
 
-  private Shape randomShape() {
+  private GeoShape randomShape() {
     return random().nextBoolean() ? randomCircle() : randomRectangle();
   }
 
   //TODO move up
-  private Shape randomCircle() {
+  private GeoShape randomCircle() {
     final Point point = randomPoint();
     //TODO pick using gaussian
     double radius;
@@ -125,13 +121,13 @@ public class CompositeStrategyTest extends RandomSpatialOpStrategyTestCase {
     } else {
       //find distance to closest edge
       final Rectangle worldBounds = ctx.getWorldBounds();
-      double maxRad = point.getX() - worldBounds.getMinX();
-      maxRad = Math.min(maxRad, worldBounds.getMaxX() - point.getX());
-      maxRad = Math.min(maxRad, point.getY() - worldBounds.getMinY());
-      maxRad = Math.min(maxRad, worldBounds.getMaxY() - point.getY());
+      double maxRad = point.lon() - worldBounds.minLon();
+      maxRad = Math.min(maxRad, worldBounds.maxLon() - point.lon());
+      maxRad = Math.min(maxRad, point.lat() - worldBounds.minLat());
+      maxRad = Math.min(maxRad, worldBounds.maxLat() - point.lat());
       radius = randomDouble() * maxRad;
     }
 
-    return ctx.makeCircle(point, radius);
+    return new Circle(point.lat(), point.lon(), radius);
   }
 }

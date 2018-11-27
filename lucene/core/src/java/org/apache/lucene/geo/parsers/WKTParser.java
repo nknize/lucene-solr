@@ -1,20 +1,18 @@
 /*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
  *
- *    http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 package org.apache.lucene.geo.parsers;
 
@@ -26,6 +24,7 @@ import java.util.ArrayList;
 
 import org.apache.lucene.geo.geometry.Point;
 import org.apache.lucene.geo.geometry.GeoShape;
+import org.apache.lucene.geo.geometry.Rectangle;
 import org.apache.lucene.geo.geometry.ShapeType;
 import org.apache.lucene.geo.geometry.Line;
 import org.apache.lucene.geo.geometry.MultiLine;
@@ -37,11 +36,12 @@ import org.apache.lucene.geo.geometry.Polygon;
  * Created by nknize on 3/12/17.
  */
 public class WKTParser {
-  private static final String EMPTY = "EMPTY";
-  private static final String LPAREN = "(";
-  private static final String RPAREN = ")";
-  private static final String COMMA = ",";
-  private static final String NAN = "NaN";
+  public static final String EMPTY = "EMPTY";
+  public static final String SPACE = " ";
+  public static final String LPAREN = "(";
+  public static final String RPAREN = ")";
+  public static final String COMMA = ",";
+  public static final String NAN = "NaN";
 
   private static final String NUMBER = "<NUMBER>";
   private static final String EOF = "END-OF-STREAM";
@@ -87,6 +87,8 @@ public class WKTParser {
         return parsePolygon(stream);
       case MULTIPOLYGON:
         return parseMultiPolygon(stream);
+      case ENVELOPE:
+        return parseBBox(stream);
     }
     throw new IllegalArgumentException("Unknown geometry type: " + type);
   }
@@ -199,6 +201,21 @@ public class WKTParser {
     return new MultiPolygon(p);
   }
 
+  private static Rectangle parseBBox(StreamTokenizer stream) throws IOException, ParseException {
+    if (nextEmptyOrOpen(stream).equals(EMPTY)) {
+      return null;
+    }
+    double minLon = nextNumber(stream);
+    nextComma(stream);
+    double maxLon = nextNumber(stream);
+    nextComma(stream);
+    double maxLat = nextNumber(stream);
+    nextComma(stream);
+    double minLat = nextNumber(stream);
+    nextCloser(stream);
+    return new Rectangle(minLat, maxLat, minLon, maxLon);
+  }
+
   /** next word in the stream */
   private static String nextWord(StreamTokenizer stream) throws ParseException, IOException {
     switch (stream.nextToken()) {
@@ -257,6 +274,13 @@ public class WKTParser {
       return RPAREN;
     }
     throw new ParseException("expected " + RPAREN + " but found: " + tokenString(stream), stream.lineno());
+  }
+
+  private static String nextComma(StreamTokenizer stream) throws IOException, ParseException {
+    if (nextWord(stream).equals(COMMA) == true) {
+      return COMMA;
+    }
+    throw new ParseException("expected " + COMMA + " but found: " + tokenString(stream), stream.lineno());
   }
 
   private static String nextOpener(StreamTokenizer stream) throws IOException, ParseException {

@@ -24,16 +24,17 @@ import java.util.Map;
 import java.util.Objects;
 
 import com.google.common.geometry.S2CellId;
+import org.apache.lucene.spatial.geometry.Geometry;
+import org.apache.lucene.spatial.geometry.Geometry.Relation;
+import org.apache.lucene.spatial.geometry.Rectangle;
 import org.apache.lucene.util.BytesRef;
-import org.locationtech.spatial4j.shape.Shape;
-import org.locationtech.spatial4j.shape.SpatialRelation;
 
 /**
  * This class represents a S2 pixel in the RPT.
  *
  * @lucene.internal
  */
-class S2PrefixTreeCell implements CellCanPrune {
+class S2PrefixTreeCell implements LegacyCell {
 
     //Faces of S2 Geometry
     private static S2CellId[] FACES = new S2CellId[6];
@@ -67,9 +68,9 @@ class S2PrefixTreeCell implements CellCanPrune {
     int level; //cache level
     S2PrefixTree tree;
 
-    SpatialRelation shapeRel = null;
+    Relation shapeRel = null;
     boolean isLeaf;
-    Shape shape = null;
+    Geometry shape = null;
 
     S2PrefixTreeCell(S2PrefixTree tree, S2CellId cellId) {
         this.cellId = cellId;
@@ -93,12 +94,12 @@ class S2PrefixTreeCell implements CellCanPrune {
     }
 
     @Override
-    public SpatialRelation getShapeRel() {
+    public Relation getShapeRel() {
         return shapeRel;
     }
 
     @Override
-    public void setShapeRel(SpatialRelation rel) {
+    public void setShapeRel(Relation rel) {
         shapeRel = rel;
     }
 
@@ -110,6 +111,11 @@ class S2PrefixTreeCell implements CellCanPrune {
     @Override
     public void setLeaf() {
         isLeaf = true;
+    }
+
+    @Override
+    public S2PrefixTree getGrid() {
+        return tree;
     }
 
     @Override
@@ -151,7 +157,7 @@ class S2PrefixTreeCell implements CellCanPrune {
     }
 
     @Override
-    public CellIterator getNextLevelCells(Shape shapeFilter) {
+    public CellIterator getNextLevelCells(Geometry shapeFilter) {
         S2CellId[] children;
         if (cellId == null) { // this is the world cell
             children = FACES;
@@ -171,7 +177,7 @@ class S2PrefixTreeCell implements CellCanPrune {
     }
 
     @Override
-    public Shape getShape() {
+    public Geometry getShape() {
         if (shape == null) {
             if (cellId == null) { //World cell
                 shape = tree.getSpatialContext().getWorldBounds();
@@ -180,6 +186,18 @@ class S2PrefixTreeCell implements CellCanPrune {
             }
         }
         return shape;
+    }
+
+    @Override
+    public Rectangle getRectangle() {
+      if (shape == null) {
+        if (cellId == null) { //World cell
+          shape = tree.getSpatialContext().getWorldBounds();
+        } else {
+          shape = tree.s2ShapeFactory.getS2CellShape(cellId);
+        }
+      }
+      return (Rectangle)shape;
     }
 
     @Override

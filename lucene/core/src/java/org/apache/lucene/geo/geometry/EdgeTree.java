@@ -66,7 +66,10 @@ final class EdgeTree {
   /** root node of edge tree */
   private final Edge tree;
 
-  private final boolean isCyclic;
+  /** area (in sq meters) of shape represented by the tree */
+  private double areaSqDegrees = Double.NaN;
+  // NOCOMMIT
+//  private final boolean isCyclic;
 
   EdgeTree(Line boundary) {
     this(boundary, null);
@@ -74,16 +77,23 @@ final class EdgeTree {
 
   EdgeTree(Line boundary, EdgeTree holes) {
     this.holes = holes;
-    this.minLat = boundary.minLat;
-    this.maxLat = boundary.maxLat;
-    this.minLon = boundary.minLon;
-    this.maxLon = boundary.maxLon;
+    this.minLat = boundary.minLat();
+    this.maxLat = boundary.maxLat();
+    this.minLon = boundary.minLon();
+    this.maxLon = boundary.maxLon();
     this.maxY = maxLat;
     this.maxX = maxLon;
-    this.isCyclic = boundary instanceof Polygon;
+//    this.isCyclic = boundary instanceof Polygon;
 
     // create interval tree of edges
     this.tree = createTree(boundary.getLats(), boundary.getLons());
+    if (holes != null) {
+      this.areaSqDegrees -= holes.areaSqDegrees;
+    }
+  }
+
+  public double getArea() {
+    return areaSqDegrees;
   }
 
   /**
@@ -179,41 +189,41 @@ final class EdgeTree {
     return Relation.DISJOINT;
   }
 
-  /** Traverse 2 EdgeTrees to find */
-  public Relation relate(EdgeTree o) {
-    // if the bounding boxes are disjoint then the trees are disjoint
-    if (o.maxLon < this.minLon || o.minLon > this.maxLon || o.maxLat < this.minLat || o.minLat > this.maxLat) {
-      return Relation.DISJOINT;
-    }
-
-    // check any holes
-    if (holes != null) {
-      Relation holeRelation = holes.relate(o);
-      if (holeRelation == Relation.CROSSES) {
-        return Relation.CROSSES;
-      } else if (holeRelation == Relation.CONTAINS) {
-        return Relation.DISJOINT;
-      }
-    }
-
-    boolean crosses = tree.crosses(o.tree);
-
-    if (crosses == false) {
-      // iff other is a closed shape; check one point is in the shape (if so its contained):
-      if (o.isCyclic) {
-        if (o.componentContains(tree.lat1, tree.lon1)) {
-          return Relation.WITHIN;
-        } else if (this.isCyclic && componentContains(o.tree.lat1, o.tree.lat2)) {
-          return Relation.CONTAINS;
-        }
-      } else if (this.isCyclic && componentContains(o.tree.lat1, o.tree.lon1)) {
-        return Relation.CONTAINS;
-      }
-      return Relation.DISJOINT;
-    }
-
-    return Relation.CROSSES;
-  }
+//  /** Traverse 2 EdgeTrees to find */
+//  public Relation relate(EdgeTree o) {
+//    // if the bounding boxes are disjoint then the trees are disjoint
+//    if (o.maxLon < this.minLon || o.minLon > this.maxLon || o.maxLat < this.minLat || o.minLat > this.maxLat) {
+//      return Relation.DISJOINT;
+//    }
+//
+//    // check any holes
+//    if (holes != null) {
+//      Relation holeRelation = holes.relate(o);
+//      if (holeRelation == Relation.CROSSES) {
+//        return Relation.CROSSES;
+//      } else if (holeRelation == Relation.CONTAINS) {
+//        return Relation.DISJOINT;
+//      }
+//    }
+//
+//    boolean crosses = tree.crosses(o.tree);
+//
+//    if (crosses == false) {
+//      // iff other is a closed shape; check one point is in the shape (if so its contained):
+//      if (o.isCyclic) {
+//        if (o.componentContains(tree.lat1, tree.lon1)) {
+//          return Relation.WITHIN;
+//        } else if (this.isCyclic && componentContains(o.tree.lat1, o.tree.lat2)) {
+//          return Relation.CONTAINS;
+//        }
+//      } else if (this.isCyclic && componentContains(o.tree.lat1, o.tree.lon1)) {
+//        return Relation.CONTAINS;
+//      }
+//      return Relation.DISJOINT;
+//    }
+//
+//    return Relation.CROSSES;
+//  }
 
   /** Returns relation to the provided rectangle for this component */
   private Relation componentRelate(double minLat, double maxLat, double minLon, double maxLon) {
@@ -223,13 +233,13 @@ final class EdgeTree {
     }
     // if the rectangle fully encloses us, we cross.
     if (minLat <= this.minLat && maxLat >= this.maxLat && minLon <= this.minLon && maxLon >= this.maxLon) {
-      return Relation.CROSSES;
+      return Relation.INTERSECTS;
     }
     // check any holes
     if (holes != null) {
       Relation holeRelation = holes.relate(minLat, maxLat, minLon, maxLon);
-      if (holeRelation == Relation.CROSSES) {
-        return Relation.CROSSES;
+      if (holeRelation == Relation.INTERSECTS) {
+        return Relation.INTERSECTS;
       } else if (holeRelation == Relation.WITHIN) {
         return Relation.DISJOINT;
       }
@@ -237,17 +247,17 @@ final class EdgeTree {
     // check each corner: if < 4 are present, its cheaper than crossesSlowly
     int numCorners = numberOfCorners(minLat, maxLat, minLon, maxLon);
     if (numCorners == 4) {
-      if (tree.crosses(minLat, maxLat, minLon, maxLon)) {
-        return Relation.CROSSES;
+      if (tree.intersects(minLat, maxLat, minLon, maxLon)) {
+        return Relation.INTERSECTS;
       }
       return Relation.WITHIN;
     } else if (numCorners > 0) {
-      return Relation.CROSSES;
+      return Relation.INTERSECTS;
     }
 
     // we cross
-    if (tree.crosses(minLat, maxLat, minLon, maxLon)) {
-      return Relation.CROSSES;
+    if (tree.intersects(minLat, maxLat, minLon, maxLon)) {
+      return Relation.INTERSECTS;
     }
 
     return Relation.DISJOINT;
@@ -261,15 +271,15 @@ final class EdgeTree {
     // check any holes
     if (holes != null) {
       Relation holeRelation = holes.relateLine(lat1, lon1, lat2, lon2);
-      if (holeRelation == Relation.CROSSES) {
-        return Relation.CROSSES;
+      if (holeRelation == Relation.INTERSECTS) {
+        return Relation.INTERSECTS;
       } else if (holeRelation == Relation.WITHIN) {
         return Relation.DISJOINT;
       }
     }
-    // we cross
-    if (tree.crossesLine(lat1, lon1, lat2, lon2)) {
-      return Relation.CROSSES;
+    // we intersects
+    if (tree.intersectsLine(lat1, lon1, lat2, lon2)) {
+      return Relation.INTERSECTS;
     }
     return Relation.DISJOINT;
   }
@@ -357,10 +367,12 @@ final class EdgeTree {
     if (newNode.left != null) {
       newNode.maxX = Math.max(newNode.maxX, newNode.left.maxX);
       newNode.maxY = Math.max(newNode.maxY, newNode.left.maxY);
+      newNode.areaSqDegrees += newNode.left.areaSqDegrees;
     }
     if (newNode.right != null) {
       newNode.maxX = Math.max(newNode.maxX, newNode.right.maxX);
       newNode.maxY = Math.max(newNode.maxY, newNode.right.maxY);
+      newNode.areaSqDegrees += newNode.right.areaSqDegrees;
     }
     return newNode;
   }
@@ -458,7 +470,7 @@ final class EdgeTree {
     }
 
     /** Returns true if the box crosses any edge in this edge subtree */
-    boolean crosses(double minLat, double maxLat, double minLon, double maxLon) {
+    boolean intersects(double minLat, double maxLat, double minLon, double maxLon) {
       // we just have to cross one edge to answer the question, so we descend the tree and return when we do.
       if (minLat <= max) {
         // we compute line intersections of every polygon edge with every box line.
@@ -508,13 +520,13 @@ final class EdgeTree {
         }
 
         if (left != null) {
-          if (left.crosses(minLat, maxLat, minLon, maxLon)) {
+          if (left.intersects(minLat, maxLat, minLon, maxLon)) {
             return true;
           }
         }
 
         if (right != null && maxLat >= low) {
-          if (right.crosses(minLat, maxLat, minLon, maxLon)) {
+          if (right.intersects(minLat, maxLat, minLon, maxLon)) {
             return true;
           }
         }
@@ -522,14 +534,14 @@ final class EdgeTree {
       return false;
     }
 
-    /** Returns the relation between the two DAGs */
-    boolean crosses(Edge o) {
-      return crossesLine(o.lat1, o.lon1, o.lat2, o.lon2)
-          || (o.left != null && crosses(o.left))
-          || (o.right != null && crosses(o.right));
-    }
+//    /** Returns the relation between the two DAGs */
+//    boolean crosses(Edge o) {
+//      return crossesLine(o.lat1, o.lon1, o.lat2, o.lon2)
+//          || (o.left != null && crosses(o.left))
+//          || (o.right != null && crosses(o.right));
+//    }
 
-    boolean crossesLine(double lineLat1, double lineLon1, double lineLat2, double lineLon2) {
+    boolean intersectsLine(double lineLat1, double lineLon1, double lineLat2, double lineLon2) {
       // we just have to cross one edge to answer the question, so we descend the tree and return when we do.
       double minLat, maxLat;
       if (lineLat1 < lineLat2) {
@@ -575,13 +587,13 @@ final class EdgeTree {
         }
 
         if (left != null) {
-          if (left.crossesLine(minLat, maxLat, minLon, maxLon)) {
+          if (left.intersectsLine(minLat, maxLat, minLon, maxLon)) {
             return true;
           }
         }
 
         if (right != null && maxLat >= low) {
-          if (right.crossesLine(minLat, maxLat, minLon, maxLon)) {
+          if (right.intersectsLine(minLat, maxLat, minLon, maxLon)) {
             return true;
           }
         }
@@ -625,15 +637,18 @@ final class EdgeTree {
    * Creates an edge interval tree from a set of polygon vertices.
    * @return root node of the tree.
    */
-  private static Edge createTree(double polyLats[], double polyLons[]) {
-    Edge edges[] = new Edge[polyLats.length - 1];
+  private Edge createTree(double polyLats[], double polyLons[]) {
+    final Edge edges[] = new Edge[polyLats.length - 1];
+    double area = 0;
     for (int i = 1; i < polyLats.length; i++) {
       double lat1 = polyLats[i-1];
       double lon1 = polyLons[i-1];
       double lat2 = polyLats[i];
       double lon2 = polyLons[i];
       edges[i - 1] = new Edge(lat1, lon1, lat2, lon2, Math.min(lat1, lat2), Math.max(lat1, lat2));
+      area += lon1 * lat2 - lon2 * lat1;
     }
+    this.areaSqDegrees = StrictMath.abs(area) * 0.5d;
     // sort the edges then build a balanced tree from them
     Arrays.sort(edges, (left, right) -> {
       int ret = Double.compare(left.low, right.low);
@@ -741,7 +756,7 @@ final class EdgeTree {
     );
     r = p2.relate(-5, 5, -5, 5);
 
-    System.out.println(mp.tree.relate(p2.tree));
+    //System.out.println(mp.tree.relate(p2.tree));
 
     //
 //    Polygon p2 = new Polygon(

@@ -21,16 +21,16 @@ import java.util.HashMap;
 import java.util.Map;
 
 import org.apache.lucene.index.IndexReaderContext;
+import org.apache.lucene.spatial.SpatialContext;
+import org.apache.lucene.spatial.geometry.Geometry;
+import org.apache.lucene.spatial.geometry.Geometry.Relation;
+import org.apache.lucene.spatial.geometry.Point;
+import org.apache.lucene.spatial.geometry.Rectangle;
 import org.apache.lucene.spatial.prefix.tree.Cell;
 import org.apache.lucene.spatial.prefix.tree.CellIterator;
 import org.apache.lucene.spatial.prefix.tree.SpatialPrefixTree;
 import org.apache.lucene.util.ArrayUtil;
 import org.apache.lucene.util.Bits;
-import org.locationtech.spatial4j.context.SpatialContext;
-import org.locationtech.spatial4j.shape.Point;
-import org.locationtech.spatial4j.shape.Rectangle;
-import org.locationtech.spatial4j.shape.Shape;
-import org.locationtech.spatial4j.shape.SpatialRelation;
 
 /**
  * Computes spatial facets in two dimensions as a grid of numbers.  The data is often visualized as a so-called
@@ -89,7 +89,7 @@ public class HeatmapFacetCounter {
    * @param maxCells the maximum number of cells to return. If the cells exceed this count, an
    */
   public static Heatmap calcFacets(PrefixTreeStrategy strategy, IndexReaderContext context, Bits topAcceptDocs,
-                                   Shape inputShape, final int facetLevel, int maxCells) throws IOException {
+                                   Geometry inputShape, final int facetLevel, int maxCells) throws IOException {
     if (maxCells > (MAX_ROWS_OR_COLUMNS * MAX_ROWS_OR_COLUMNS)) {
       throw new IllegalArgumentException("maxCells (" + maxCells + ") should be <= " + MAX_ROWS_OR_COLUMNS);
     }
@@ -100,7 +100,7 @@ public class HeatmapFacetCounter {
     //First get the rect of the cell at the bottom-left at depth facetLevel
     final SpatialPrefixTree grid = strategy.getGrid();
     final SpatialContext ctx = grid.getSpatialContext();
-    final Point cornerPt = ctx.makePoint(inputRect.getMinX(), inputRect.getMinY());
+    final Point cornerPt = new Point(inputRect.left(), inputRect.bottom());
     final CellIterator cellIterator = grid.getTreeCellIterator(cornerPt, facetLevel);
     Cell cornerCell = null;
     while (cellIterator.hasNext()) {
@@ -110,13 +110,13 @@ public class HeatmapFacetCounter {
     final Rectangle cornerRect = (Rectangle) cornerCell.getShape();
     assert cornerRect.hasArea();
     //Now calculate the number of columns and rows necessary to cover the inputRect
-    double heatMinX = cornerRect.getMinX();//note: we might change this below...
+    double heatMinX = cornerRect.left();//note: we might change this below...
     final double cellWidth = cornerRect.getWidth();
-    final Rectangle worldRect = ctx.getWorldBounds();
-    final int columns = calcRowsOrCols(cellWidth, heatMinX, inputRect.getWidth(), inputRect.getMinX(), worldRect.getWidth());
-    final double heatMinY = cornerRect.getMinY();
+    final Rectangle worldRect = strategy.getSpatialContext().getWorldBounds();
+    final int columns = calcRowsOrCols(cellWidth, heatMinX, inputRect.getWidth(), inputRect.left(), worldRect.getWidth());
+    final double heatMinY = cornerRect.bottom();
     final double cellHeight = cornerRect.getHeight();
-    final int rows = calcRowsOrCols(cellHeight, heatMinY, inputRect.getHeight(), inputRect.getMinY(), worldRect.getHeight());
+    final int rows = calcRowsOrCols(cellHeight, heatMinY, inputRect.getHeight(), inputRect.bottom(), worldRect.getHeight());
     assert rows > 0 && columns > 0;
     if (columns > MAX_ROWS_OR_COLUMNS || rows > MAX_ROWS_OR_COLUMNS || columns * rows > maxCells) {
       throw new IllegalArgumentException(
@@ -127,21 +127,21 @@ public class HeatmapFacetCounter {
     final double halfCellWidth = cellWidth / 2.0;
     // if X world-wraps, use world bounds' range
     if (columns * cellWidth + halfCellWidth > worldRect.getWidth()) {
-      heatMinX = worldRect.getMinX();
+      heatMinX = worldRect.left();
     }
     double heatMaxX = heatMinX + columns * cellWidth;
-    if (Math.abs(heatMaxX - worldRect.getMaxX()) < halfCellWidth) {//numeric conditioning issue
-      heatMaxX = worldRect.getMaxX();
-    } else if (heatMaxX > worldRect.getMaxX()) {//wraps dateline (won't happen if !geo)
-      heatMaxX = heatMaxX - worldRect.getMaxX() +  worldRect.getMinX();
+    if (Math.abs(heatMaxX - worldRect.right()) < halfCellWidth) {//numeric conditioning issue
+      heatMaxX = worldRect.right();
+    } else if (heatMaxX > worldRect.right()) {//wraps dateline (won't happen if !geo)
+      heatMaxX = heatMaxX - worldRect.right() +  worldRect.left();
     }
     final double halfCellHeight = cellHeight / 2.0;
     double heatMaxY = heatMinY + rows * cellHeight;
-    if (Math.abs(heatMaxY - worldRect.getMaxY()) < halfCellHeight) {//numeric conditioning issue
-      heatMaxY = worldRect.getMaxY();
+    if (Math.abs(heatMaxY - worldRect.top()) < halfCellHeight) {//numeric conditioning issue
+      heatMaxY = worldRect.top();
     }
 
-    final Heatmap heatmap = new Heatmap(columns, rows, ctx.makeRectangle(heatMinX, heatMaxX, heatMinY, heatMaxY));
+    final Heatmap heatmap = new Heatmap(columns, rows, new Rectangle(heatMinY, heatMaxY, heatMinX, heatMaxX));
     if (topAcceptDocs instanceof Bits.MatchNoBits) {
       return heatmap; // short-circuit
     }
@@ -158,17 +158,17 @@ public class HeatmapFacetCounter {
         new PrefixTreeFacetCounter.FacetVisitor() {
       @Override
       public void visit(Cell cell, int count) {
-        final double heatMinX = heatmap.region.getMinX();
-        final Rectangle rect = (Rectangle) cell.getShape();
+        final double heatMinX = heatmap.region.left();
+        final Rectangle rect = cell.getRectangle();
         if (cell.getLevel() == facetLevel) {//heatmap level; count it directly
           //convert to col & row
           int column;
-          if (rect.getMinX() >= heatMinX) {
-            column = (int) Math.round((rect.getMinX() - heatMinX) / cellWidth);
+          if (rect.left() >= heatMinX) {
+            column = (int) Math.round((rect.left() - heatMinX) / cellWidth);
           } else { // due to dateline wrap
-            column = (int) Math.round((rect.getMinX() + 360 - heatMinX) / cellWidth);
+            column = (int) Math.round((rect.left() + 360 - heatMinX) / cellWidth);
           }
-          int row = (int) Math.round((rect.getMinY() - heatMinY) / cellHeight);
+          int row = (int) Math.round((rect.bottom() - heatMinY) / cellHeight);
           //note: unfortunately, it's possible for us to visit adjacent cells to the heatmap (if the SpatialPrefixTree
           // allows adjacent cells to overlap on the seam), so we need to skip them
           if (column < 0 || column >= heatmap.columns || row < 0 || row >= heatmap.rows) {
@@ -177,7 +177,7 @@ public class HeatmapFacetCounter {
           // increment
           heatmap.counts[column * heatmap.rows + row] += count;
 
-        } else if (rect.relate(heatmap.region) == SpatialRelation.CONTAINS) {//containing ancestor
+        } else if (rect.relate(heatmap.region) == Relation.CONTAINS) {//containing ancestor
           allCellsAncestorCount[0] += count;
 
         } else { // ancestor
@@ -211,12 +211,12 @@ public class HeatmapFacetCounter {
       final int count = entry.getValue();
 
       //note: we approach this in a way that eliminates int overflow/underflow (think huge cell, tiny heatmap)
-      intersectInterval(heatMinY, heatMaxY, cellHeight, rows, rect.getMinY(), rect.getMaxY(), pair);
+      intersectInterval(heatMinY, heatMaxY, cellHeight, rows, rect.bottom(), rect.top(), pair);
       final int startRow = pair[0];
       final int endRow = pair[1];
 
-      if (!heatmap.region.getCrossesDateLine()) {
-        intersectInterval(heatMinX, heatMaxX, cellWidth, columns, rect.getMinX(), rect.getMaxX(), pair);
+      if (!(heatmap.region.left() > heatmap.region.right())) {
+        intersectInterval(heatMinX, heatMaxX, cellWidth, columns, rect.left(), rect.right(), pair);
         final int startCol = pair[0];
         final int endCol = pair[1];
         incrementRange(heatmap, startCol, endCol, startRow, endRow, count);
@@ -226,15 +226,15 @@ public class HeatmapFacetCounter {
         final int leftColumns = (int) Math.round((180 - heatMinX) / cellWidth);
         final int rightColumns = heatmap.columns - leftColumns;
         //left half of dateline:
-        if (rect.getMaxX() > heatMinX) {
-          intersectInterval(heatMinX, 180, cellWidth, leftColumns, rect.getMinX(), rect.getMaxX(), pair);
+        if (rect.right() > heatMinX) {
+          intersectInterval(heatMinX, 180, cellWidth, leftColumns, rect.left(), rect.right(), pair);
           final int startCol = pair[0];
           final int endCol = pair[1];
           incrementRange(heatmap, startCol, endCol, startRow, endRow, count);
         }
         //right half of dateline
-        if (rect.getMinX() < heatMaxX) {
-          intersectInterval(-180, heatMaxX, cellWidth, rightColumns, rect.getMinX(), rect.getMaxX(), pair);
+        if (rect.left() < heatMaxX) {
+          intersectInterval(-180, heatMaxX, cellWidth, rightColumns, rect.left(), rect.right(), pair);
           final int startCol = pair[0] + leftColumns;
           final int endCol = pair[1] + leftColumns;
           incrementRange(heatmap, startCol, endCol, startRow, endRow, count);

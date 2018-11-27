@@ -19,6 +19,8 @@ package org.apache.lucene.spatial;
 import java.util.ArrayList;
 import java.util.Collection;
 
+import org.apache.lucene.geo.geometry.GeoShape;
+import org.apache.lucene.geo.geometry.Rectangle;
 import org.apache.lucene.spatial.bbox.BBoxStrategy;
 import org.apache.lucene.spatial.composite.CompositeSpatialStrategy;
 import org.apache.lucene.spatial.prefix.RecursivePrefixTreeStrategy;
@@ -28,12 +30,10 @@ import org.apache.lucene.spatial.prefix.tree.QuadPrefixTree;
 import org.apache.lucene.spatial.prefix.tree.SpatialPrefixTree;
 import org.apache.lucene.spatial.query.SpatialArgs;
 import org.apache.lucene.spatial.query.SpatialOperation;
-import org.apache.lucene.spatial.serialized.SerializedDVStrategy;
+import org.apache.lucene.spatial.serialized.LegacySerializedDVStrategy;
 import org.apache.lucene.spatial.vector.PointVectorStrategy;
 import org.apache.lucene.util.LuceneTestCase;
 import org.junit.Test;
-import org.locationtech.spatial4j.context.SpatialContext;
-import org.locationtech.spatial4j.shape.Shape;
 
 public class QueryEqualsHashCodeTest extends LuceneTestCase {
 
@@ -45,10 +45,10 @@ public class QueryEqualsHashCodeTest extends LuceneTestCase {
   public void testEqualsHashCode() {
 
     switch (random().nextInt(4)) {//0-3
-      case 0: predicate = SpatialOperation.Contains; break;
-      case 1: predicate = SpatialOperation.IsWithin; break;
+      case 0: predicate = SpatialOperation.CONTAINS; break;
+      case 1: predicate = SpatialOperation.WITHIN; break;
 
-      default: predicate = SpatialOperation.Intersects; break;
+      default: predicate = SpatialOperation.INTERSECTS; break;
     }
     final SpatialPrefixTree gridQuad = new QuadPrefixTree(ctx,10);
     final SpatialPrefixTree gridGeohash = new GeohashPrefixTree(ctx,10);
@@ -59,7 +59,7 @@ public class QueryEqualsHashCodeTest extends LuceneTestCase {
     strategies.add(new TermQueryPrefixTreeStrategy(gridQuad, "termquery_quad"));
     strategies.add(PointVectorStrategy.newInstance(ctx, "pointvector"));
     strategies.add(BBoxStrategy.newInstance(ctx, "bbox"));
-    final SerializedDVStrategy serialized = new SerializedDVStrategy(ctx, "serialized");
+    final LegacySerializedDVStrategy serialized = new LegacySerializedDVStrategy(ctx, "serialized");
     strategies.add(serialized);
     strategies.add(new CompositeSpatialStrategy("composite", recursive_geohash, serialized));
     for (SpatialStrategy strategy : strategies) {
@@ -103,12 +103,12 @@ public class QueryEqualsHashCodeTest extends LuceneTestCase {
   }
 
   private SpatialArgs makeArgs1() {
-    final Shape shape1 = ctx.makeRectangle(0, 0, 10, 10);
+    final GeoShape shape1 = new Rectangle(10, 10, 0, 0);
     return new SpatialArgs(predicate, shape1);
   }
 
   private SpatialArgs makeArgs2() {
-    final Shape shape2 = ctx.makeRectangle(0, 0, 20, 20);
+    final GeoShape shape2 = new Rectangle(20, 20, 0, 0);
     return new SpatialArgs(predicate, shape2);
   }
 

@@ -18,14 +18,14 @@ package org.apache.lucene.spatial.bbox;
 
 import java.io.IOException;
 
+import org.apache.lucene.geo.geometry.GeoShape;
+import org.apache.lucene.geo.geometry.Rectangle;
 import org.apache.lucene.index.DocValues;
 import org.apache.lucene.index.LeafReader;
 import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.index.NumericDocValues;
 import org.apache.lucene.spatial.ShapeValues;
 import org.apache.lucene.spatial.ShapeValuesSource;
-import org.locationtech.spatial4j.shape.Rectangle;
-import org.locationtech.spatial4j.shape.Shape;
 
 /**
  * A ShapeValuesSource returning a Rectangle from each document derived from four numeric fields
@@ -54,7 +54,7 @@ class BBoxValueSource extends ShapeValuesSource {
     final NumericDocValues maxY = DocValues.getNumeric(reader, strategy.field_maxY);
 
     //reused
-    final Rectangle rect = strategy.getSpatialContext().makeRectangle(0,0,0,0);
+    final MutableRectangle rect = new MutableRectangle(0, 0, 0, 0);
 
     return new ShapeValues() {
 
@@ -64,7 +64,7 @@ class BBoxValueSource extends ShapeValuesSource {
       }
 
       @Override
-      public Shape value() throws IOException {
+      public GeoShape value() throws IOException {
         double minXValue = Double.longBitsToDouble(minX.longValue());
         double minYValue = Double.longBitsToDouble(minY.longValue());
         double maxXValue = Double.longBitsToDouble(maxX.longValue());
@@ -97,5 +97,45 @@ class BBoxValueSource extends ShapeValuesSource {
   @Override
   public int hashCode() {
     return strategy.hashCode();
+  }
+
+  class MutableRectangle extends Rectangle {
+    double minX, maxX;
+    double minY, maxY;
+
+    MutableRectangle(double minX, double maxX, double minY, double maxY) {
+      super(minY, maxY, minX, maxX);
+      minX = minLon;
+      maxX = maxLon;
+      minY = minLat;
+      maxY = maxLat;
+    }
+
+    public void reset(double minX, double maxX, double minY, double maxY) {
+      minX = minLon;
+      maxX = maxLon;
+      minY = minLat;
+      maxY = maxLat;
+    }
+
+    @Override
+    public double minLat() {
+      return minY;
+    }
+
+    @Override
+    public double maxLat() {
+      return maxY;
+    }
+
+    @Override
+    public double minLon() {
+      return minX;
+    }
+
+    @Override
+    public double maxLon() {
+      return maxX;
+    }
   }
 }

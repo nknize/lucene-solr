@@ -19,7 +19,6 @@ package org.apache.lucene.spatial.serialized;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
-import java.io.DataOutputStream;
 import java.io.FilterOutputStream;
 import java.io.IOException;
 
@@ -40,16 +39,14 @@ import org.apache.lucene.search.TwoPhaseIterator;
 import org.apache.lucene.search.Weight;
 import org.apache.lucene.spatial.ShapeValues;
 import org.apache.lucene.spatial.ShapeValuesSource;
+import org.apache.lucene.spatial.SpatialContext;
 import org.apache.lucene.spatial.SpatialStrategy;
+import org.apache.lucene.spatial.geometry.Geometry;
+import org.apache.lucene.spatial.geometry.Point;
 import org.apache.lucene.spatial.query.SpatialArgs;
 import org.apache.lucene.spatial.util.DistanceToShapeValueSource;
 import org.apache.lucene.spatial.util.ShapeValuesPredicate;
 import org.apache.lucene.util.BytesRef;
-import org.locationtech.spatial4j.context.SpatialContext;
-import org.locationtech.spatial4j.io.BinaryCodec;
-import org.locationtech.spatial4j.shape.Point;
-import org.locationtech.spatial4j.shape.Shape;
-
 
 /**
  * A SpatialStrategy based on serializing a Shape stored into BinaryDocValues.
@@ -61,7 +58,7 @@ import org.locationtech.spatial4j.shape.Shape;
  *
  * @lucene.experimental
  */
-public class SerializedDVStrategy extends SpatialStrategy {
+public class LegacySerializedDVStrategy extends SpatialStrategy {
 
   /**
    * A cache heuristic for the buf size based on the last shape size.
@@ -72,17 +69,17 @@ public class SerializedDVStrategy extends SpatialStrategy {
   /**
    * Constructs the spatial strategy with its mandatory arguments.
    */
-  public SerializedDVStrategy(SpatialContext ctx, String fieldName) {
+  public LegacySerializedDVStrategy(SpatialContext ctx, String fieldName) {
     super(ctx, fieldName);
   }
 
   @Override
-  public Field[] createIndexableFields(Shape shape) {
+  public Field[] createIndexableFields(Geometry shape) {
     int bufSize = Math.max(128, (int) (this.indexLastBufSize * 1.5));//50% headroom over last
     ByteArrayOutputStream byteStream = new ByteArrayOutputStream(bufSize);
     final BytesRef bytesRef = new BytesRef();//receiver of byteStream's bytes
     try {
-      ctx.getBinaryCodec().writeShape(new DataOutputStream(byteStream), shape);
+      ShapeSerializer.writeFromShape(shape, byteStream);
       //this is a hack to avoid redundant byte array copying by byteStream.toByteArray()
       byteStream.writeTo(new FilterOutputStream(null/*not used*/) {
         @Override
@@ -120,7 +117,7 @@ public class SerializedDVStrategy extends SpatialStrategy {
    * Provides access to each shape per document
    */ //TODO raise to SpatialStrategy
   public ShapeValuesSource makeShapeValueSource() {
-    return new ShapeDocValueSource(getFieldName(), ctx.getBinaryCodec());
+    return new ShapeDocValueSource(getFieldName());
   }
 
   /** Warning: don't iterate over the results of this query; it's designed for use in a random-access fashion
@@ -177,11 +174,9 @@ public class SerializedDVStrategy extends SpatialStrategy {
   static class ShapeDocValueSource extends ShapeValuesSource {
 
     private final String fieldName;
-    private final BinaryCodec binaryCodec;//spatial4j
 
-    private ShapeDocValueSource(String fieldName, BinaryCodec binaryCodec) {
+    private ShapeDocValueSource(String fieldName) {
       this.fieldName = fieldName;
-      this.binaryCodec = binaryCodec;
     }
 
     @Override
@@ -195,11 +190,11 @@ public class SerializedDVStrategy extends SpatialStrategy {
         }
 
         @Override
-        public Shape value() throws IOException {
+        public Geometry value() throws IOException {
           BytesRef bytesRef = docValues.binaryValue();
           DataInputStream dataInput
               = new DataInputStream(new ByteArrayInputStream(bytesRef.bytes, bytesRef.offset, bytesRef.length));
-          return binaryCodec.readShape(dataInput);
+          return ShapeSerializer.readFromShape(dataInput);
         }
 
       };

@@ -24,13 +24,12 @@ import org.apache.lucene.search.DoubleValuesSource;
 import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.spatial.ShapeValues;
 import org.apache.lucene.spatial.ShapeValuesSource;
-import org.locationtech.spatial4j.context.SpatialContext;
-import org.locationtech.spatial4j.shape.Shape;
+import org.apache.lucene.spatial.SpatialContext;
 
 /**
  * The area of a Shape retrieved from an ShapeValuesSource
  *
- * @see Shape#getArea(org.locationtech.spatial4j.context.SpatialContext)
+ * @see org.apache.lucene.geo.geometry.GeoShape#getArea()
  *
  * @lucene.experimental
  */
@@ -58,7 +57,8 @@ public class ShapeAreaValueSource extends DoubleValuesSource {
     return DoubleValues.withDefault(new DoubleValues() {
       @Override
       public double doubleValue() throws IOException {
-        return shapeValues.value().getArea(geoArea ? ctx : null) * multiplier;
+        return shapeValues.value().area() * multiplier;
+//        return shapeValues.value().getArea(geoArea ? ctx : null) * multiplier;
       }
 
       @Override

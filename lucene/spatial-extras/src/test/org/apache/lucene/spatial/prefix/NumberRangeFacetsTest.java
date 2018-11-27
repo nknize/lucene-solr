@@ -23,6 +23,8 @@ import java.util.Collections;
 import java.util.List;
 
 import com.carrotsearch.randomizedtesting.annotations.Repeat;
+import org.apache.lucene.geo.geometry.GeoShape;
+import org.apache.lucene.geo.geometry.GeoShape.Relation;
 import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.ScoreMode;
@@ -40,7 +42,6 @@ import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.FixedBitSet;
 import org.junit.Before;
 import org.junit.Test;
-import org.locationtech.spatial4j.shape.Shape;
 
 import static com.carrotsearch.randomizedtesting.RandomizedTest.randomInt;
 import static com.carrotsearch.randomizedtesting.RandomizedTest.randomIntBetween;
@@ -67,7 +68,7 @@ public class NumberRangeFacetsTest extends StrategyTestCase {
   @Test
   public void test() throws IOException {
     //generate test data
-    List<Shape> indexedShapes = new ArrayList<>();
+    List<GeoShape> indexedShapes = new ArrayList<>();
     final int numIndexedShapes = random().nextInt(15);
     for (int i = 0; i < numIndexedShapes; i++) {
       indexedShapes.add(randomShape());
@@ -75,7 +76,7 @@ public class NumberRangeFacetsTest extends StrategyTestCase {
 
     //Main index loop:
     for (int i = 0; i < indexedShapes.size(); i++) {
-      Shape shape = indexedShapes.get(i);
+      GeoShape shape = indexedShapes.get(i);
       adoc(""+i, shape);
 
       if (random().nextInt(10) == 0)
@@ -145,24 +146,24 @@ public class NumberRangeFacetsTest extends StrategyTestCase {
       //System.out.println("Q: " + queryIdx + " " + facets);
 
       //Verify results. We do it by looping over indexed shapes and reducing the facet counts.
-      Shape facetShapeRounded = facetRange.roundToLevel(detailLevel);
+      GeoShape facetShapeRounded = facetRange.roundToLevel(detailLevel);
       for (int indexedShapeId = 0; indexedShapeId < indexedShapes.size(); indexedShapeId++) {
         if (topAcceptDocs != null && !acceptFieldIds.contains(indexedShapeId)) {
           continue;// this doc was filtered out via acceptDocs
         }
-        Shape indexedShape = indexedShapes.get(indexedShapeId);
+        GeoShape indexedShape = indexedShapes.get(indexedShapeId);
         if (indexedShape == null) {//was deleted
           continue;
         }
-        Shape indexedShapeRounded = ((NumberRangePrefixTree.NRShape) indexedShape).roundToLevel(detailLevel);
-        if (!indexedShapeRounded.relate(facetShapeRounded).intersects()) { // no intersection at all
+        GeoShape indexedShapeRounded = ((NumberRangePrefixTree.NRShape) indexedShape).roundToLevel(detailLevel);
+        if (indexedShapeRounded.relate(facetShapeRounded) != Relation.INTERSECTS) { // no intersection at all
           continue;
         }
         // walk the cells
         final CellIterator cellIterator = tree.getTreeCellIterator(indexedShape, detailLevel);
         while (cellIterator.hasNext()) {
           Cell cell = cellIterator.next();
-          if (!cell.getShape().relate(facetShapeRounded).intersects()) {
+          if (cell.getShape().relate(facetShapeRounded) != Relation.INTERSECTS) {
             cellIterator.remove();//no intersection; prune
             continue;
           }
@@ -242,7 +243,7 @@ public class NumberRangeFacetsTest extends StrategyTestCase {
     }
   }
 
-  protected Shape randomShape() {
+  protected GeoShape randomShape() {
     Calendar cal1 = randomCalendar();
     UnitNRShape s1 = tree.toShape(cal1);
     if (rarely()) {

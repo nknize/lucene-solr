@@ -16,14 +16,15 @@
  */
 package org.apache.lucene.spatial.prefix.tree;
 
-import org.locationtech.spatial4j.shape.Shape;
-import org.locationtech.spatial4j.shape.SpatialRelation;
+import org.apache.lucene.spatial.geometry.Geometry;
+import org.apache.lucene.spatial.geometry.Geometry.Relation;
+import org.apache.lucene.spatial.geometry.Rectangle;
 import org.apache.lucene.util.BytesRef;
 
 /**
  * Represents a grid cell. Cell instances are generally very transient and may be re-used
  * internally.  To get an instance, you could start with {@link SpatialPrefixTree#getWorldCell()}.
- * And from there you could either traverse down the tree with {@link #getNextLevelCells(org.locationtech.spatial4j.shape.Shape)},
+ * And from there you could either traverse down the tree with {@link #getNextLevelCells(Geometry)},
  * or you could read an indexed term via {@link SpatialPrefixTree#readCell(org.apache.lucene.util.BytesRef,Cell)}.
  * When a cell is read from a term, it is comprised of just the base bytes plus optionally a leaf flag.
  *
@@ -40,11 +41,11 @@ public interface Cell {
 
   /** Gets the relationship this cell has with the shape from which it was filtered from, assuming it came from a
    * {@link CellIterator}. Arguably it belongs there but it's very convenient here. */
-  SpatialRelation getShapeRel();
+  Relation getShapeRel();
 
   /** See {@link #getShapeRel()}.
    * @lucene.internal */
-  void setShapeRel(SpatialRelation rel);
+  void setShapeRel(Relation rel);
 
   /**
    * Some cells are flagged as leaves, which are indexed as such. A leaf cell is either within some
@@ -58,6 +59,12 @@ public interface Cell {
    * Note: not supported at level 0.
    * @lucene.internal */
   void setLeaf();
+
+  /**
+   * Children cells for this cell will be eligible for pruning via
+   *  {@link org.apache.lucene.spatial.prefix.RecursivePrefixTreeStrategy#setPruneLeafyBranches(boolean)}
+   *  @lucene.internal */
+  boolean cellCanPrune();
 
   /**
    * Returns the bytes for this cell, with a leaf byte <em>if this is a leaf cell</em>.
@@ -92,10 +99,12 @@ public interface Cell {
    * @param shapeFilter an optional filter for the returned cells.
    * @return A set of cells (no dups), sorted. Not Modifiable.
    */
-  CellIterator getNextLevelCells(Shape shapeFilter);
+  CellIterator getNextLevelCells(Geometry shapeFilter);
 
   /** Gets the shape for this cell; typically a Rectangle. */
-  Shape getShape();
+  Geometry getShape();
+
+  Rectangle getRectangle();
 
   /**
    * Returns if the target term is within/underneath this cell; not necessarily a direct

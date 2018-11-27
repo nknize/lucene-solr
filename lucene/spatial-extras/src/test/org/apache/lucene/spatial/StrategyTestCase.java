@@ -39,11 +39,11 @@ import org.apache.lucene.search.DoubleValues;
 import org.apache.lucene.search.DoubleValuesSource;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.TermQuery;
+import org.apache.lucene.spatial.geometry.Geometry;
+import org.apache.lucene.spatial.geometry.parsers.WKTParser;
 import org.apache.lucene.spatial.query.SpatialArgs;
 import org.apache.lucene.spatial.query.SpatialArgsParser;
 import org.apache.lucene.spatial.query.SpatialOperation;
-import org.locationtech.spatial4j.context.SpatialContext;
-import org.locationtech.spatial4j.shape.Shape;
 
 public abstract class StrategyTestCase extends SpatialTestCase {
 
@@ -91,7 +91,7 @@ public abstract class StrategyTestCase extends SpatialTestCase {
       Document document = new Document();
       document.add(new StringField("id", data.id, Field.Store.YES));
       document.add(new StringField("name", data.name, Field.Store.YES));
-      Shape shape = data.shape;
+      Geometry shape = data.shape;
       shape = convertShapeFromGetDocuments(shape);
       if (shape != null) {
         for (Field f : strategy.createIndexableFields(shape)) {
@@ -107,7 +107,7 @@ public abstract class StrategyTestCase extends SpatialTestCase {
   }
 
   /** Subclasses may override to transform or remove a shape for indexing */
-  protected Shape convertShapeFromGetDocuments(Shape shape) {
+  protected Geometry convertShapeFromGetDocuments(Geometry shape) {
     return shape;
   }
 
@@ -185,14 +185,14 @@ public abstract class StrategyTestCase extends SpatialTestCase {
   }
 
   protected void adoc(String id, String shapeStr) throws IOException, ParseException {
-    Shape shape = shapeStr==null ? null : ctx.readShapeFromWkt(shapeStr);
+    Geometry shape = shapeStr==null ? null : WKTParser.parse(shapeStr);
     addDocument(newDoc(id, shape));
   }
-  protected void adoc(String id, Shape shape) throws IOException {
+  protected void adoc(String id, Geometry shape) throws IOException {
     addDocument(newDoc(id, shape));
   }
 
-  protected Document newDoc(String id, Shape shape) {
+  protected Document newDoc(String id, Geometry shape) {
     Document doc = new Document();
     doc.add(new StringField("id", id, Field.Store.YES));
     if (shape != null) {
@@ -224,12 +224,12 @@ public abstract class StrategyTestCase extends SpatialTestCase {
 
   }
 
-  protected void testOperation(Shape indexedShape, SpatialOperation operation,
-                               Shape queryShape, boolean match) throws IOException {
+  protected void testOperation(Geometry indexedShape, SpatialOperation operation,
+                               Geometry queryShape, boolean match) throws IOException {
     assertTrue("Faulty test",
         operation.evaluate(indexedShape, queryShape) == match ||
             indexedShape.equals(queryShape) &&
-              (operation == SpatialOperation.Contains || operation == SpatialOperation.IsWithin));
+              (operation == SpatialOperation.CONTAINS || operation == SpatialOperation.WITHIN));
     adoc("0", indexedShape);
     commit();
     Query query = strategy.makeQuery(new SpatialArgs(operation, queryShape));

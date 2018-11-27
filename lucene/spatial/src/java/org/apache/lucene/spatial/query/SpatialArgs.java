@@ -16,14 +16,15 @@
  */
 package org.apache.lucene.spatial.query;
 
-import org.locationtech.spatial4j.context.SpatialContext;
-import org.locationtech.spatial4j.shape.Point;
-import org.locationtech.spatial4j.shape.Rectangle;
-import org.locationtech.spatial4j.shape.Shape;
+import org.apache.lucene.spatial.SpatialContext;
+import org.apache.lucene.spatial.SpatialStrategy;
+import org.apache.lucene.spatial.geometry.Geometry;
+import org.apache.lucene.spatial.geometry.Point;
+import org.apache.lucene.spatial.geometry.Rectangle;
 
 /**
- * Principally holds the query {@link Shape} and the {@link SpatialOperation}.
- * It's used as an argument to some methods on {@link org.apache.lucene.spatial.SpatialStrategy}.
+ * Principally holds the query {@link Geometry} and the {@link SpatialOperation}.
+ * It's used as an argument to some methods on {@link SpatialStrategy}.
  *
  * @lucene.experimental
  */
@@ -31,14 +32,15 @@ public class SpatialArgs {
 
   public static final double DEFAULT_DISTERRPCT = 0.025d;
 
-  private SpatialOperation operation;
-  private Shape shape;
-  private Double distErrPct;
-  private Double distErr;
+  protected SpatialOperation operation;
+  protected Geometry shape;
+  protected Double distErrPct;
+  protected Double distErr;
 
-  public SpatialArgs(SpatialOperation operation, Shape shape) {
-    if (operation == null || shape == null)
+  public SpatialArgs(SpatialOperation operation, Geometry shape) {
+    if (operation == null || shape == null) {
       throw new NullPointerException("operation and shape are required");
+    }
     this.operation = operation;
     this.shape = shape;
   }
@@ -50,10 +52,9 @@ public class SpatialArgs {
    *
    * @param shape Mandatory.
    * @param distErrPct 0 to 0.5
-   * @param ctx Mandatory
    * @return A distance (in degrees).
    */
-  public static double calcDistanceFromErrPct(Shape shape, double distErrPct, SpatialContext ctx) {
+  public static double calcDistanceFromErrPct(Geometry shape, double distErrPct, SpatialContext ctx) {
     if (distErrPct < 0 || distErrPct > 0.5) {
       throw new IllegalArgumentException("distErrPct " + distErrPct + " must be between [0 to 0.5]");
     }
@@ -65,8 +66,13 @@ public class SpatialArgs {
     // to a bottom corner vs a top corner can vary in a geospatial scenario,
     // take the closest one (greater precision).
     Point ctr = bbox.getCenter();
-    double y = (ctr.getY() >= 0 ? bbox.getMaxY() : bbox.getMinY());
-    double diagonalDist = ctx.getDistCalc().distance(ctr, bbox.getMaxX(), y);
+    return calcDistanceFromErrPct(distErrPct, bbox.bottom(), bbox.top(), bbox.right(), ctr.y(), ctr.x());
+  }
+
+  protected static double calcDistanceFromErrPct(final double distErrPct, final double minLat, final double maxLat,
+                                                 final double maxLon, final double cntrLat, final double cntrLon) {
+    double y = (cntrLat >= 0 ? maxLat : minLat);
+    double diagonalDist =  SpatialContext.calculateDistanceDegrees(cntrLat, cntrLon, y, maxLon);
     return diagonalDist * distErrPct;
   }
 
@@ -107,11 +113,11 @@ public class SpatialArgs {
     this.operation = operation;
   }
 
-  public Shape getShape() {
+  public Geometry getShape() {
     return shape;
   }
 
-  public void setShape(Shape shape) {
+  public void setShape(Geometry shape) {
     this.shape = shape;
   }
 
@@ -120,8 +126,7 @@ public class SpatialArgs {
    * inflates the size of the shape but should not shrink it.
    *
    * @return 0 to 0.5
-   * @see #calcDistanceFromErrPct(org.locationtech.spatial4j.shape.Shape, double,
-   *      org.locationtech.spatial4j.context.SpatialContext)
+   * @see #calcDistanceFromErrPct(Geometry, double, SpatialContext)
    */
   public Double getDistErrPct() {
     return distErrPct;
@@ -145,4 +150,8 @@ public class SpatialArgs {
   public void setDistErr(Double distErr) {
     this.distErr = distErr;
   }
+
+
+
 }
+

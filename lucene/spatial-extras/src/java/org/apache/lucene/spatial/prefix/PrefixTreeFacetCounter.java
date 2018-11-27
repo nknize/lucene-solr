@@ -18,7 +18,7 @@ package org.apache.lucene.spatial.prefix;
 
 import java.io.IOException;
 
-import org.locationtech.spatial4j.shape.Shape;
+import org.apache.lucene.spatial.geometry.Geometry;
 import org.apache.lucene.index.IndexReaderContext;
 import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.index.PostingsEnum;
@@ -39,7 +39,7 @@ import org.apache.lucene.util.Bits;
  * the document could be present in BOTH the postings for a cell in both its prefix and leaf variants.  To avoid this,
  * use a single valued field with a {@link org.locationtech.spatial4j.shape.ShapeCollection} (or WKT equivalent).  Or
  * calculate a suitable level/distErr to index both and call
- * {@link org.apache.lucene.spatial.prefix.PrefixTreeStrategy#createIndexableFields(org.locationtech.spatial4j.shape.Shape, int)}
+ * {@link org.apache.lucene.spatial.prefix.PrefixTreeStrategy#createIndexableFields(Geometry, int)}
  * with the same value for all shapes for a given document/field.
  *
  * @lucene.experimental
@@ -72,7 +72,7 @@ public class PrefixTreeFacetCounter {
    * @param facetVisitor the visitor/callback to receive the counts
    */
   public static void compute(PrefixTreeStrategy strategy, IndexReaderContext context, Bits topAcceptDocs,
-                             Shape queryShape, int facetLevel, FacetVisitor facetVisitor)
+                             Geometry queryShape, int facetLevel, FacetVisitor facetVisitor)
       throws IOException {
     //We collect per-leaf
     for (final LeafReaderContext leafCtx : context.leaves()) {
@@ -100,7 +100,7 @@ public class PrefixTreeFacetCounter {
 
   /** Lower-level per-leaf segment method. */
   public static void compute(final PrefixTreeStrategy strategy, final LeafReaderContext context, final Bits acceptDocs,
-                             final Shape queryShape, final int facetLevel, final FacetVisitor facetVisitor)
+                             final Geometry queryShape, final int facetLevel, final FacetVisitor facetVisitor)
       throws IOException {
     if (acceptDocs != null && acceptDocs.length() != context.reader().maxDoc()) {
       throw new IllegalArgumentException(

@@ -21,13 +21,12 @@ import java.util.Collection;
 import java.util.List;
 import java.util.NoSuchElementException;
 
+import org.apache.lucene.spatial.geometry.Geometry;
+import org.apache.lucene.spatial.geometry.Geometry.Relation;
+import org.apache.lucene.spatial.geometry.Point;
+import org.apache.lucene.spatial.geometry.Rectangle;
+import org.apache.lucene.spatial.SpatialContext;
 import org.apache.lucene.util.BytesRef;
-import org.locationtech.spatial4j.context.SpatialContext;
-import org.locationtech.spatial4j.shape.Point;
-import org.locationtech.spatial4j.shape.Rectangle;
-import org.locationtech.spatial4j.shape.Shape;
-import org.locationtech.spatial4j.shape.SpatialRelation;
-import org.locationtech.spatial4j.shape.impl.RectangleImpl;
 
 /**
  * Uses a compact binary representation of 8 bytes to encode a spatial quad trie.
@@ -84,33 +83,34 @@ public class PackedQuadPrefixTree extends QuadPrefixTree {
   @Override
   public Cell getCell(Point p, int level) {
     List<Cell> cells = new ArrayList<>(1);
-    build(xmid, ymid, 0, cells, 0x0L, ctx.makePoint(p.getX(), p.getY()), level);
+    build(xmid, ymid, 0, cells, 0x0L, p.x(), p.y(), level);
     return cells.get(0);//note cells could be longer if p on edge
   }
 
-  protected void build(double x, double y, int level, List<Cell> matches, long term, Shape shape, int maxLevel) {
+  protected void build(double x, double y, int level, List<Cell> matches, long term, double ptX, double ptY, int maxLevel) {
     double w = levelW[level] / 2;
     double h = levelH[level] / 2;
 
     // Z-Order
     // http://en.wikipedia.org/wiki/Z-order_%28curve%29
-    checkBattenberg(QUAD[0], x - w, y + h, level, matches, term, shape, maxLevel);
-    checkBattenberg(QUAD[1], x + w, y + h, level, matches, term, shape, maxLevel);
-    checkBattenberg(QUAD[2], x - w, y - h, level, matches, term, shape, maxLevel);
-    checkBattenberg(QUAD[3], x + w, y - h, level, matches, term, shape, maxLevel);
+    checkBattenberg(QUAD[0], x - w, y + h, level, matches, term, ptX, ptY, maxLevel);
+    checkBattenberg(QUAD[1], x + w, y + h, level, matches, term, ptX, ptY, maxLevel);
+    checkBattenberg(QUAD[2], x - w, y - h, level, matches, term, ptX, ptY, maxLevel);
+    checkBattenberg(QUAD[3], x + w, y - h, level, matches, term, ptX, ptY, maxLevel);
   }
 
   protected void checkBattenberg(byte quad, double cx, double cy, int level, List<Cell> matches,
-                               long term, Shape shape, int maxLevel) {
+                                 long term, double x, double y, int maxLevel) {
     // short-circuit if we find a match for the point (no need to continue recursion)
-    if (shape instanceof Point && !matches.isEmpty())
+    if (matches.isEmpty() == false) {
       return;
+    }
     double w = levelW[level] / 2;
     double h = levelH[level] / 2;
 
-    SpatialRelation v = shape.relate(ctx.makeRectangle(cx - w, cx + w, cy - h, cy + h));
+    Relation v = relate(cy - h, cy, cx - w, cx, x, y);
 
-    if (SpatialRelation.DISJOINT == v) {
+    if (v == Relation.DISJOINT) {
       return;
     }
 
@@ -119,10 +119,10 @@ public class PackedQuadPrefixTree extends QuadPrefixTree {
     // increment level
     term = ((term>>>1)+1)<<1;
 
-    if (SpatialRelation.CONTAINS == v || (level >= maxLevel)) {
+    if (v == Relation.WITHIN || (level >= maxLevel)) {
       matches.add(new PackedQuadCell(term, v.transpose()));
     } else {// SpatialRelation.WITHIN, SpatialRelation.INTERSECTS
-      build(cx, cy, level, matches, term, shape, maxLevel);
+      build(cx, cy, level, matches, term, x, y, maxLevel);
     }
   }
 
@@ -136,7 +136,7 @@ public class PackedQuadPrefixTree extends QuadPrefixTree {
   }
 
   @Override
-  public CellIterator getTreeCellIterator(Shape shape, int detailLevel) {
+  public CellIterator getTreeCellIterator(Geometry shape, int detailLevel) {
     if (detailLevel > maxLevels) {
       throw new IllegalArgumentException("detailLevel:" + detailLevel +" exceed max: " + maxLevels);
     }
@@ -166,7 +166,7 @@ public class PackedQuadPrefixTree extends QuadPrefixTree {
       readLeafAdjust();
     }
 
-    PackedQuadCell(long term, SpatialRelation shapeRel) {
+    PackedQuadCell(long term, Relation shapeRel) {
       this(term);
       this.shapeRel = shapeRel;
     }
@@ -341,7 +341,7 @@ public class PackedQuadPrefixTree extends QuadPrefixTree {
         width = gridW;
         height = gridH;
       }
-      return new RectangleImpl(xmin, xmin + width, ymin, ymin + height, ctx);
+      return new Rectangle(ymin, ymin + height, xmin, xmin + width);
     }
 
     private long fromBytes(byte b1, byte b2, byte b3, byte b4, byte b5, byte b6, byte b7, byte b8) {
@@ -383,7 +383,7 @@ public class PackedQuadPrefixTree extends QuadPrefixTree {
   /** This is a streamlined version of TreeCellIterator, with built-in support to prune at detailLevel
    * (but not recursively upwards). */
   protected class PrefixTreeIterator extends CellIterator {
-    private Shape shape;
+    private Geometry shape;
     private PackedQuadCell thisCell;
     private PackedQuadCell nextCell;
 
@@ -391,7 +391,7 @@ public class PackedQuadPrefixTree extends QuadPrefixTree {
     private final short detailLevel;
     private CellIterator pruneIter;
 
-    PrefixTreeIterator(Shape shape, short detailLevel) {
+    PrefixTreeIterator(Geometry shape, short detailLevel) {
       this.shape = shape;
       this.thisCell = ((PackedQuadCell)(getWorldCell())).nextCell(true);
       this.detailLevel = detailLevel;
@@ -403,24 +403,25 @@ public class PackedQuadPrefixTree extends QuadPrefixTree {
       if (nextCell != null) {
         return true;
       }
-      SpatialRelation rel;
+      Relation rel;
       // loop until we're at the end of the quad tree or we hit a relation
       while (thisCell != null) {
-        rel = thisCell.getShape().relate(shape);
-        if (rel == SpatialRelation.DISJOINT) {
+        Rectangle r = thisCell.getRectangle();
+        rel = shape.relate(r.left(), r.right(), r.bottom(), r.top());
+        if (rel == Relation.DISJOINT) {
           thisCell = thisCell.nextCell(false);
         } else { // within || intersects || contains
           thisCell.setShapeRel(rel);
           nextCell = thisCell;
-          if (rel == SpatialRelation.WITHIN) {
+          if (rel == Relation.CONTAINS) {
             thisCell.setLeaf();
             thisCell = thisCell.nextCell(false);
-          } else {  // intersects || contains
+          } else {  // intersects || within
             level = (short) (thisCell.getLevel());
             if (level == detailLevel || pruned(rel)) {
               thisCell.setLeaf();
               if (shape instanceof Point) {
-                thisCell.setShapeRel(SpatialRelation.WITHIN);
+                thisCell.setShapeRel(Relation.WITHIN);
                 thisCell = null;
               } else {
                 thisCell = thisCell.nextCell(false);
@@ -435,9 +436,9 @@ public class PackedQuadPrefixTree extends QuadPrefixTree {
       return nextCell != null;
     }
 
-    private boolean pruned(SpatialRelation rel) {
+    private boolean pruned(Relation rel) {
       int leaves;
-      if (rel == SpatialRelation.INTERSECTS && leafyPrune && level == detailLevel - 1) {
+      if (rel == Relation.INTERSECTS && leafyPrune && level == detailLevel - 1) {
         for (leaves=0, pruneIter=thisCell.getNextLevelCells(shape); pruneIter.hasNext(); pruneIter.next(), ++leaves);
         return leaves == 4;
       }

@@ -29,13 +29,13 @@ import org.apache.lucene.search.ScoreMode;
 import org.apache.lucene.search.Scorer;
 import org.apache.lucene.search.TwoPhaseIterator;
 import org.apache.lucene.search.Weight;
+import org.apache.lucene.spatial.geometry.Geometry;
+import org.apache.lucene.spatial.geometry.Geometry.Relation;
 import org.apache.lucene.spatial.prefix.AbstractVisitingPrefixTreeQuery;
 import org.apache.lucene.spatial.prefix.tree.Cell;
 import org.apache.lucene.spatial.prefix.tree.SpatialPrefixTree;
 import org.apache.lucene.spatial.util.ShapeValuesPredicate;
 import org.apache.lucene.util.DocIdSetBuilder;
-import org.locationtech.spatial4j.shape.Shape;
-import org.locationtech.spatial4j.shape.SpatialRelation;
 
 /**
  * A spatial Intersects predicate that distinguishes an approximated match from an exact match based on which cells
@@ -49,7 +49,7 @@ public class IntersectsRPTVerifyQuery extends Query {
   private final IntersectsDifferentiatingQuery intersectsDiffQuery;
   private final ShapeValuesPredicate predicateValueSource;
 
-  public IntersectsRPTVerifyQuery(Shape queryShape, String fieldName, SpatialPrefixTree grid, int detailLevel,
+  public IntersectsRPTVerifyQuery(Geometry queryShape, String fieldName, SpatialPrefixTree grid, int detailLevel,
                                   int prefixGridScanLevel, ShapeValuesPredicate predicateValueSource) {
     this.predicateValueSource = predicateValueSource;
     this.intersectsDiffQuery = new IntersectsDifferentiatingQuery(queryShape, fieldName, grid, detailLevel,
@@ -149,7 +149,7 @@ public class IntersectsRPTVerifyQuery extends Query {
   // TODO refactor AVPTQ to not be a Query?
   private static class IntersectsDifferentiatingQuery extends AbstractVisitingPrefixTreeQuery {
 
-    public IntersectsDifferentiatingQuery(Shape queryShape, String fieldName, SpatialPrefixTree grid,
+    public IntersectsDifferentiatingQuery(Geometry queryShape, String fieldName, SpatialPrefixTree grid,
                                           int detailLevel, int prefixGridScanLevel) {
       super(queryShape, fieldName, grid, detailLevel, prefixGridScanLevel);
     }
@@ -202,7 +202,7 @@ public class IntersectsRPTVerifyQuery extends Query {
 
       @Override
       protected boolean visitPrefix(Cell cell) throws IOException {
-        if (cell.getShapeRel() == SpatialRelation.WITHIN) {
+        if (cell.getShapeRel() == Relation.CONTAINS) {
           exactIsEmpty = false;
           collectDocs(exactBuilder);//note: we'll add exact to approx on finish()
           return false;
@@ -216,7 +216,7 @@ public class IntersectsRPTVerifyQuery extends Query {
 
       @Override
       protected void visitLeaf(Cell cell) throws IOException {
-        if (cell.getShapeRel() == SpatialRelation.WITHIN) {
+        if (cell.getShapeRel() == Relation.CONTAINS) {
           exactIsEmpty = false;
           collectDocs(exactBuilder);//note: we'll add exact to approx on finish()
         } else {

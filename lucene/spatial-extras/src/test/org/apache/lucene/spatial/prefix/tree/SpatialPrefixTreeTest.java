@@ -16,17 +16,17 @@
  */
 package org.apache.lucene.spatial.prefix.tree;
 
-import org.locationtech.spatial4j.context.SpatialContext;
-import org.locationtech.spatial4j.shape.Point;
-import org.locationtech.spatial4j.shape.Rectangle;
-import org.locationtech.spatial4j.shape.Shape;
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.Field;
 import org.apache.lucene.document.Field.Store;
 import org.apache.lucene.document.TextField;
+import org.apache.lucene.geo.geometry.GeoShape;
+import org.apache.lucene.geo.geometry.Point;
+import org.apache.lucene.geo.geometry.Rectangle;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.ScoreDoc;
 import org.apache.lucene.search.TopDocs;
+import org.apache.lucene.spatial.SpatialContext;
 import org.apache.lucene.spatial.SpatialTestCase;
 import org.apache.lucene.spatial.prefix.TermQueryPrefixTreeStrategy;
 import org.apache.lucene.spatial.query.SpatialArgs;
@@ -69,7 +69,7 @@ public class SpatialPrefixTreeTest extends SpatialTestCase {
 
       assertEquals(prevC.getLevel()+1,c.getLevel());
       Rectangle prevNShape = (Rectangle) prevC.getShape();
-      Shape s = c.getShape();
+      GeoShape s = c.getShape();
       Rectangle sbox = s.getBoundingBox();
       assertTrue(prevNShape.getWidth() > sbox.getWidth());
       assertTrue(prevNShape.getHeight() > sbox.getHeight());
@@ -87,7 +87,7 @@ public class SpatialPrefixTreeTest extends SpatialTestCase {
     Document doc = new Document();
     doc.add(new TextField("id", "1", Store.YES));
 
-    Shape area = ctx.makeRectangle(-122.82, -122.78, 48.54, 48.56);
+    GeoShape area = new Rectangle(48.54, 48.56, -122.82, -122.78);
 
     Field[] fields = strategy.createIndexableFields(area, 0.025);
     for (Field field : fields) {
@@ -95,10 +95,11 @@ public class SpatialPrefixTreeTest extends SpatialTestCase {
     }
     addDocument(doc);
 
-    Point upperleft = ctx.makePoint(-122.88, 48.54);
-    Point lowerright = ctx.makePoint(-122.82, 48.62);
+    Point upperleft = new Point(48.54, -122.88);
+    Point lowerright = new Point(48.62, -122.82);
 
-    Query query = strategy.makeQuery(new SpatialArgs(SpatialOperation.Intersects, ctx.makeRectangle(upperleft, lowerright)));
+    Query query = strategy.makeQuery(new SpatialArgs(SpatialOperation.INTERSECTS,
+        new Rectangle(lowerright.lat(), lowerright.lon(), upperleft.lat(), upperleft.lon())));
 
     commit();
 

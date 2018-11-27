@@ -1,27 +1,31 @@
 /*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
  *
- *    http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 package org.apache.lucene.geo.geometry;
 
+import java.io.IOException;
+
 import org.apache.lucene.geo.geometry.GeoShape.ConnectedComponent;
+import org.apache.lucene.geo.parsers.WKBParser;
+import org.apache.lucene.store.OutputStreamDataOutput;
 
 /**
- * Created by nknize on 2/24/17.
+ * Represents a Line on the earth's surface in lat/lon decimal degrees.
+ *
+ * @lucene.experimental
  */
 public class Line extends MultiPoint implements ConnectedComponent {
   EdgeTree tree;
@@ -52,6 +56,7 @@ public class Line extends MultiPoint implements ConnectedComponent {
   public EdgeTree createEdgeTree() {
     return new EdgeTree(this);
 
+    // NOCOMMIT
 //    EdgeTree components[] = new EdgeTree[lines.length];
 //    for (int i = 0; i < components.length; i++) {
 //      Line gon = lines[i];
@@ -73,5 +78,19 @@ public class Line extends MultiPoint implements ConnectedComponent {
     int result = super.hashCode();
     result = 31 * result + (tree != null ? tree.hashCode() : 0);
     return result;
+  }
+
+  @Override
+  protected void appendWKBContent(OutputStreamDataOutput out) throws IOException {
+    lineToWKB(lats, lons, out, false);
+  }
+
+  public static void lineToWKB(final double[] lats, final double[] lons, OutputStreamDataOutput out, boolean writeHeader) throws IOException {
+    if (writeHeader == true) {
+      out.writeVInt(WKBParser.ByteOrder.XDR.ordinal());
+      out.writeVInt(ShapeType.LINESTRING.wkbOrdinal());
+    }
+    out.writeVInt(lats.length);  // number of points
+    pointsToWKB(lats, lons, out, false);
   }
 }

@@ -18,20 +18,20 @@ package org.apache.lucene.spatial.serialized;
 
 import java.io.IOException;
 
+import org.apache.lucene.spatial.SpatialContext;
 import org.apache.lucene.spatial.SpatialMatchConcern;
 import org.apache.lucene.spatial.StrategyTestCase;
 import org.junit.Before;
 import org.junit.Test;
-import org.locationtech.spatial4j.context.SpatialContext;
 
-public class SerializedStrategyTest extends StrategyTestCase {
+public class LegacySerializedStrategyTest extends StrategyTestCase {
 
   @Before
   @Override
   public void setUp() throws Exception {
     super.setUp();
     this.ctx = SpatialContext.GEO;
-    this.strategy = new SerializedDVStrategy(ctx, "serialized");
+    this.strategy = new LegacySerializedDVStrategy(ctx, "serialized");
   }
 
   @Test

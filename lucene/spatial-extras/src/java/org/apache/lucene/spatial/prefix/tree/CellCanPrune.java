@@ -17,10 +17,10 @@
 
 package org.apache.lucene.spatial.prefix.tree;
 
-import org.locationtech.spatial4j.shape.Shape;
+import org.apache.lucene.spatial.geometry.Geometry;
 
 /**
- *  Grid cells that share nothing with other cells when calling {@link #getNextLevelCells(Shape)}
+ *  Grid cells that share nothing with other cells when calling {@link #getNextLevelCells(Geometry)}
  *  might implement this interface. Children cells for this cell will be eligible for pruning via
  *  {@link org.apache.lucene.spatial.prefix.RecursivePrefixTreeStrategy#setPruneLeafyBranches(boolean)}.
  *

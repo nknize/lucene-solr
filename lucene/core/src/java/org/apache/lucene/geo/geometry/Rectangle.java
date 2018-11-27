@@ -16,7 +16,11 @@
  */
 package org.apache.lucene.geo.geometry;
 
+import java.io.IOException;
+
 import org.apache.lucene.geo.GeoUtils;
+import org.apache.lucene.geo.parsers.WKTParser;
+import org.apache.lucene.store.OutputStreamDataOutput;
 
 import static java.lang.Math.PI;
 import static java.lang.Math.max;
@@ -37,8 +41,8 @@ import static org.apache.lucene.util.SloppyMath.cos;
 import static org.apache.lucene.util.SloppyMath.toDegrees;
 import static org.apache.lucene.util.SloppyMath.toRadians;
 
-/** Represents a lat/lon rectangle. */
-public class Rectangle {
+/** Represents a lat/lon rectangle in decimal degrees. */
+public class Rectangle extends GeoShape {
   /** maximum longitude value (in degrees) */
   public final double minLat;
   /** minimum longitude value (in degrees) */
@@ -47,6 +51,8 @@ public class Rectangle {
   public final double maxLat;
   /** minimum latitude value (in degrees) */
   public final double maxLon;
+  /** center of rectangle (in lat/lon degrees) */
+  private final Point center;
 
   /**
    * Constructs a bounding box by first validating the provided latitude and longitude coordinates
@@ -63,6 +69,136 @@ public class Rectangle {
     assert maxLat >= minLat;
 
     // NOTE: cannot assert maxLon >= minLon since this rect could cross the dateline
+    this.boundingBox = this;
+
+    // compute the center of the rectangle
+    final double cntrLat = getHeight() / 2 + minLat;
+    double cntrLon = getWidth() / 2 + minLon;
+    if (crossesDateline()) {
+      cntrLon = GeoUtils.normalizeLonDegrees(cntrLon);
+    }
+    this.center = new Point(cntrLat, cntrLon);
+  }
+
+  @Override
+  public boolean hasArea() {
+    return minLat != maxLat && minLon != maxLon;
+  }
+
+  public double getWidth() {
+    if (crossesDateline()) {
+      return GeoUtils.MAX_LON_INCL - minLon + maxLon - GeoUtils.MIN_LON_INCL;
+    }
+    return maxLon - minLon;
+  }
+
+  public double getHeight() {
+    return maxLat - minLat;
+  }
+
+  public Point getCenter() {
+    return this.center;
+  }
+
+  @Override
+  public ShapeType type() {
+    return ShapeType.ENVELOPE;
+  }
+
+  @Override
+  public Relation relate(double minLat, double maxLat, double minLon, double maxLon) {
+    if (minLat == GeoUtils.MIN_LAT_INCL && maxLat == GeoUtils.MAX_LAT_INCL
+        && minLon == GeoUtils.MIN_LON_INCL && maxLon == GeoUtils.MAX_LON_INCL) {
+      return Relation.WITHIN;
+    } else if (this.minLat == GeoUtils.MIN_LAT_INCL && this.maxLat == GeoUtils.MAX_LAT_INCL
+        && this.minLon == GeoUtils.MIN_LON_INCL && this.maxLon == GeoUtils.MAX_LON_INCL) {
+      return Relation.CONTAINS;
+    } else if (crossesDateline() == true) {
+      return relateXDL(minLat, maxLat, minLon, maxLon);
+    } else if (minLon > maxLon) {
+      if (rectDisjoint(this.minLat, this.maxLat, this.minLon, this.maxLon, minLat, maxLat, minLon, GeoUtils.MAX_LON_INCL)
+          && rectDisjoint(this.minLat, this.maxLat, this.minLon, this.maxLon, minLat, maxLat, GeoUtils.MIN_LON_INCL, maxLon)) {
+        return Relation.DISJOINT;
+      } else if (rectWithin(this.minLat, this.maxLat, this.minLon, this.maxLon, minLat, maxLat, minLon, GeoUtils.MAX_LON_INCL)
+        || rectWithin(this.minLat, this.maxLat, this.minLon, this.maxLon, minLat, maxLat, GeoUtils.MIN_LON_INCL, maxLon)) {
+        return Relation.WITHIN;
+      } // can't contain
+    } else if (rectDisjoint(this.minLat, this.maxLat, this.minLon, this.maxLon, minLat, maxLat, minLon, maxLon)) {
+      return Relation.DISJOINT;
+    } else if (rectWithin(this.minLat, this.maxLat, this.minLon, this.maxLon, minLat, maxLat, minLon, maxLon)) {
+      return Relation.WITHIN;
+    } else if (rectWithin(minLat, maxLat, minLon, maxLon, this.minLat, this.maxLat, this.minLon, this.maxLon)) {
+      return Relation.CONTAINS;
+    }
+    return Relation.INTERSECTS;
+  }
+
+  /** compute relation for this Rectangle crossing the dateline */
+  private Relation relateXDL(double minLat, double maxLat, double minLon, double maxLon) {
+    if (minLon > maxLon) {
+      // incoming rectangle crosses dateline; just check latitude for disjoint
+      if (this.minLat > maxLat || this.maxLat < minLat) {
+        return Relation.DISJOINT;
+      } else if (rectWithin(this.minLat, this.maxLat, this.minLon, this.maxLon, minLat, maxLat, minLon, maxLon)) {
+        return Relation.WITHIN;
+      } else if (rectWithin(minLat, maxLat, minLon, maxLon, this.minLat, this.maxLat, this.minLon, this.maxLon)) {
+        return Relation.CONTAINS;
+      }
+    } else {
+      if (rectDisjoint(this.minLat, this.maxLat, this.minLon, GeoUtils.MAX_LON_INCL, minLat, maxLat, minLon, maxLon)
+          && rectDisjoint(this.minLat, this.maxLat, GeoUtils.MIN_LON_INCL, this.maxLon, minLat, maxLat, minLon, maxLon)) {
+        return Relation.DISJOINT;
+      // WITHIN not possible; *this* rectangle crosses the dateline but *that* rectangle does not
+      } else if (rectWithin(minLat, maxLat, minLon, maxLon, this.minLat, this.maxLat, this.minLon, GeoUtils.MAX_LON_INCL)
+          || rectWithin(minLat, maxLat, minLon, maxLon, this.minLat, this.maxLat, GeoUtils.MIN_LON_INCL, this.maxLon)) {
+        return Relation.CONTAINS;
+      }
+    }
+    return Relation.INTERSECTS;
+  }
+
+  public Relation relate(double lat, double lon) {
+    if (lat > maxLat || lat < minLat || lon < minLon || lon > maxLon) {
+      return Relation.DISJOINT;
+    }
+    return Relation.INTERSECTS;
+  }
+
+  @Override
+  public Relation relate(GeoShape shape) {
+    Relation r = shape.relate(this.minLat, this.maxLat, this.minLon, this.maxLon);
+    if (r == Relation.WITHIN) {
+      return Relation.CONTAINS;
+    } else if (r == Relation.CONTAINS) {
+      return Relation.WITHIN;
+    }
+    return r;
+  }
+
+  /** Computes whether two rectangles are disjoint */
+  private static boolean rectDisjoint(final double aMinLat, final double aMaxLat, final double aMinLon, final double aMaxLon,
+                                      final double bMinLat, final double bMaxLat, final double bMinLon, final double bMaxLon) {
+    assert aMinLon <= aMaxLon : "dateline crossing not supported";
+    assert bMinLon <= bMaxLon : "dateline crossing not supported";
+    // fail quickly: test latitude
+    if (aMaxLat < bMinLat || aMinLat > bMaxLat) {
+      return true;
+    }
+
+    // check sharing dateline
+    if ((aMinLon == GeoUtils.MIN_LON_INCL && bMaxLon == GeoUtils.MAX_LON_INCL)
+        || (bMinLon == GeoUtils.MIN_LON_INCL && aMaxLon == GeoUtils.MAX_LON_INCL)) {
+      return false;
+    }
+
+    // check longitude
+    return aMaxLon < bMinLon || aMinLon > bMaxLon;
+  }
+
+  /** Computes whether the first (a) rectangle is wholly within another (b) rectangle (shared boundaries allowed) */
+  private static boolean rectWithin(final double aMinLat, final double aMaxLat, final double aMinLon, final double aMaxLon,
+                                    final double bMinLat, final double bMaxLat, final double bMinLon, final double bMaxLon) {
+    return !(aMinLon < bMinLon || aMinLat < bMinLat || aMaxLon > bMaxLon || aMaxLat > bMaxLat);
   }
 
   @Override
@@ -180,10 +316,10 @@ public class Rectangle {
     double maxLon = Double.NEGATIVE_INFINITY;
 
     for (int i = 0;i < polygons.length; i++) {
-      minLat = min(polygons[i].minLat, minLat);
-      maxLat = max(polygons[i].maxLat, maxLat);
-      minLon = min(polygons[i].minLon, minLon);
-      maxLon = max(polygons[i].maxLon, maxLon);
+      minLat = min(polygons[i].minLat(), minLat);
+      maxLat = max(polygons[i].maxLat(), maxLat);
+      minLon = min(polygons[i].minLon(), minLon);
+      maxLon = max(polygons[i].maxLon(), maxLon);
     }
 
     return new Rectangle(minLat, maxLat, minLon, maxLon);
@@ -216,5 +352,34 @@ public class Rectangle {
     temp = Double.doubleToLongBits(maxLon);
     result = 31 * result + (int) (temp ^ (temp >>> 32));
     return result;
+  }
+
+  @Override
+  protected StringBuilder contentToWKT() {
+    StringBuilder sb = new StringBuilder();
+
+    sb.append(WKTParser.LPAREN);
+    // minX, maxX, maxY, minY
+    sb.append(minLon);
+    sb.append(WKTParser.COMMA);
+    sb.append(WKTParser.SPACE);
+    sb.append(maxLon);
+    sb.append(WKTParser.COMMA);
+    sb.append(WKTParser.SPACE);
+    sb.append(maxLat);
+    sb.append(WKTParser.COMMA);
+    sb.append(WKTParser.SPACE);
+    sb.append(minLat);
+    sb.append(WKTParser.RPAREN);
+
+    return sb;
+  }
+
+  @Override
+  protected void appendWKBContent(OutputStreamDataOutput out) throws IOException {
+    out.writeVLong(Double.doubleToRawLongBits(minLon));
+    out.writeVLong(Double.doubleToRawLongBits(maxLon));
+    out.writeVLong(Double.doubleToRawLongBits(maxLat));
+    out.writeVLong(Double.doubleToRawLongBits(minLat));
   }
 }

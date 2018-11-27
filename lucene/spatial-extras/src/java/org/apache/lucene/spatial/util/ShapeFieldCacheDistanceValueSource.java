@@ -23,9 +23,8 @@ import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.search.DoubleValues;
 import org.apache.lucene.search.DoubleValuesSource;
 import org.apache.lucene.search.IndexSearcher;
-import org.locationtech.spatial4j.context.SpatialContext;
-import org.locationtech.spatial4j.distance.DistanceCalculator;
-import org.locationtech.spatial4j.shape.Point;
+import org.apache.lucene.spatial.SpatialContext;
+import org.apache.lucene.spatial.geometry.Point;
 
 /**
  * A DoubleValuesSource that returns the spatial distance
@@ -64,15 +63,17 @@ public class ShapeFieldCacheDistanceValueSource extends DoubleValuesSource {
       private final ShapeFieldCache<Point> cache =
           provider.getCache(readerContext.reader());
       private final Point from = ShapeFieldCacheDistanceValueSource.this.from;
-      private final DistanceCalculator calculator = ctx.getDistCalc();
 
       private List<Point> currentVals;
 
       @Override
       public double doubleValue() throws IOException {
-        double v = calculator.distance(from, currentVals.get(0));
+        /** @todo update to use pure lucene point class */
+        Point to = currentVals.get(0);
+        double v = SpatialContext.calculateDistance(from.y(), from.x(), to.y(), to.x());
         for (int i = 1; i < currentVals.size(); i++) {
-          v = Math.min(v, calculator.distance(from, currentVals.get(i)));
+          to = currentVals.get(i);
+          v = Math.min(v, SpatialContext.calculateDistance(from.y(), from.x(), to.y(), to.x()));
         }
         return v * multiplier;
       }

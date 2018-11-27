@@ -21,6 +21,8 @@ import java.util.List;
 
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.TermInSetQuery;
+import org.apache.lucene.spatial.geometry.Geometry;
+import org.apache.lucene.spatial.geometry.Point;
 import org.apache.lucene.spatial.prefix.tree.Cell;
 import org.apache.lucene.spatial.prefix.tree.CellIterator;
 import org.apache.lucene.spatial.prefix.tree.SpatialPrefixTree;
@@ -29,13 +31,11 @@ import org.apache.lucene.spatial.query.SpatialOperation;
 import org.apache.lucene.spatial.query.UnsupportedSpatialOperation;
 import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.BytesRefBuilder;
-import org.locationtech.spatial4j.shape.Point;
-import org.locationtech.spatial4j.shape.Shape;
 
 /**
  * A basic implementation of {@link PrefixTreeStrategy} using a large
  * {@link TermInSetQuery} of all the cells from
- * {@link SpatialPrefixTree#getTreeCellIterator(org.locationtech.spatial4j.shape.Shape, int)}.
+ * {@link SpatialPrefixTree#getTreeCellIterator(Geometry, int)}.
  * It only supports the search of indexed Point shapes.
  * <p>
  * The precision of query shapes (distErrPct) is an important factor in using
@@ -69,10 +69,10 @@ public class TermQueryPrefixTreeStrategy extends PrefixTreeStrategy {
   @Override
   public Query makeQuery(SpatialArgs args) {
     final SpatialOperation op = args.getOperation();
-    if (op != SpatialOperation.Intersects)
+    if (op != SpatialOperation.INTERSECTS)
       throw new UnsupportedSpatialOperation(op);
 
-    Shape shape = args.getShape();
+    Geometry shape = args.getShape();
     int detailLevel = grid.getLevelForDistance(args.resolveDistErr(ctx, distErrPct));
 
     //--get a List of BytesRef for each term we want (no parents, no leaf bytes))

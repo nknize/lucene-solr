@@ -23,11 +23,11 @@ import java.util.List;
 import com.google.common.geometry.S2CellId;
 import com.google.common.geometry.S2LatLng;
 import com.google.common.geometry.S2Projections;
+import org.apache.lucene.spatial.geometry.Geometry;
+import org.apache.lucene.spatial.geometry.Point;
 import org.apache.lucene.util.BytesRef;
-import org.locationtech.spatial4j.context.SpatialContext;
+import org.apache.lucene.spatial.SpatialContext;
 import org.locationtech.spatial4j.distance.DistanceUtils;
-import org.locationtech.spatial4j.shape.Point;
-import org.locationtech.spatial4j.shape.Shape;
 
 /**
  * Spatial prefix tree for <a href="https://s2geometry.io/">S2 Geometry</a>. Shape factories
@@ -141,12 +141,12 @@ public class S2PrefixTree extends SpatialPrefixTree {
     }
 
     @Override
-    public CellIterator getTreeCellIterator(Shape shape, int detailLevel) {
+    public CellIterator getTreeCellIterator(Geometry shape, int detailLevel) {
         if (!(shape instanceof Point)) {
             return  super.getTreeCellIterator(shape, detailLevel);
         }
         Point p = (Point) shape;
-        S2CellId id = S2CellId.fromLatLng(S2LatLng.fromDegrees(p.getY(), p.getX())).parent(arity * (detailLevel - 1));
+        S2CellId id = S2CellId.fromLatLng(S2LatLng.fromDegrees(p.y(), p.x())).parent(arity * (detailLevel - 1));
         List<Cell> cells = new ArrayList<>(detailLevel);
         for (int i=0; i < detailLevel - 1; i++) {
             cells.add(new S2PrefixTreeCell(this, id.parent(i * arity)));

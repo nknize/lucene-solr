@@ -18,15 +18,15 @@ package org.apache.lucene.spatial.prefix;
 
 import java.io.IOException;
 
-import org.locationtech.spatial4j.context.SpatialContext;
-import org.locationtech.spatial4j.distance.DistanceUtils;
-import org.locationtech.spatial4j.shape.Circle;
-import org.locationtech.spatial4j.shape.Point;
-import org.locationtech.spatial4j.shape.Rectangle;
-import org.locationtech.spatial4j.shape.Shape;
-import org.locationtech.spatial4j.shape.SpatialRelation;
+import org.apache.lucene.geo.GeoUtils;
+import org.apache.lucene.spatial.SpatialContext;
 import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.search.DocIdSet;
+import org.apache.lucene.spatial.geometry.GeoCircle;
+import org.apache.lucene.spatial.geometry.Geometry;
+import org.apache.lucene.spatial.geometry.Geometry.Relation;
+import org.apache.lucene.spatial.geometry.Point;
+import org.apache.lucene.spatial.geometry.Rectangle;
 import org.apache.lucene.spatial.prefix.tree.Cell;
 import org.apache.lucene.spatial.prefix.tree.CellIterator;
 import org.apache.lucene.spatial.prefix.tree.SpatialPrefixTree;
@@ -34,7 +34,7 @@ import org.apache.lucene.util.BitDocIdSet;
 import org.apache.lucene.util.FixedBitSet;
 
 /**
- * Finds docs where its indexed shape is {@link org.apache.lucene.spatial.query.SpatialOperation#IsWithin
+ * Finds docs where its indexed shape is {@link org.apache.lucene.spatial.query.SpatialOperation#WITHIN
  * WITHIN} the query shape.  It works by looking at cells outside of the query
  * shape to ensure documents there are excluded. By default, it will
  * examine all cells, and it's fairly slow.  If you know that the indexed shapes
@@ -55,15 +55,15 @@ public class WithinPrefixTreeQuery extends AbstractVisitingPrefixTreeQuery {
   //TODO Could the recursion in allCellsIntersectQuery() be eliminated when non-fuzzy or other
   //  circumstances?
 
-  private final Shape bufferedQueryShape;//if null then the whole world
+  private final Geometry bufferedQueryShape;//if null then the whole world
 
   /**
-   * See {@link AbstractVisitingPrefixTreeQuery#AbstractVisitingPrefixTreeQuery(org.locationtech.spatial4j.shape.Shape, String, org.apache.lucene.spatial.prefix.tree.SpatialPrefixTree, int, int)}.
+   * See {@link AbstractVisitingPrefixTreeQuery#AbstractVisitingPrefixTreeQuery(Geometry, String, SpatialPrefixTree, int, int)}.
    * {@code queryBuffer} is the (minimum) distance beyond the query shape edge
    * where non-matching documents are looked for so they can be excluded. If
    * -1 is used then the whole world is examined (a good default for correctness).
    */
-  public WithinPrefixTreeQuery(Shape queryShape, String fieldName, SpatialPrefixTree grid,
+  public WithinPrefixTreeQuery(Geometry queryShape, String fieldName, SpatialPrefixTree grid,
                                int detailLevel, int prefixGridScanLevel,
                                double queryBuffer) {
     super(queryShape, fieldName, grid, detailLevel, prefixGridScanLevel);
@@ -102,44 +102,46 @@ public class WithinPrefixTreeQuery extends AbstractVisitingPrefixTreeQuery {
   /** Returns a new shape that is larger than shape by at distErr.
    */
   //TODO move this generic code elsewhere?  Spatial4j?
-  protected Shape bufferShape(Shape shape, double distErr) {
+  protected Geometry bufferShape(Geometry shape, double distErr) {
     if (distErr <= 0)
       throw new IllegalArgumentException("distErr must be > 0");
     SpatialContext ctx = grid.getSpatialContext();
     if (shape instanceof Point) {
-      return ctx.makeCircle((Point)shape, distErr);
-    } else if (shape instanceof Circle) {
-      Circle circle = (Circle) shape;
-      double newDist = circle.getRadius() + distErr;
+      Point p = (Point)shape;
+      return new GeoCircle(p.y(), p.x(), distErr);
+    } else if (shape instanceof GeoCircle) {
+      GeoCircle circle = (GeoCircle) shape;
+      double newDist = circle.getRadiusMeters() + distErr;
       if (ctx.isGeo() && newDist > 180)
         newDist = 180;
-      return ctx.makeCircle(circle.getCenter(), newDist);
+      return new GeoCircle(circle.getCenterLat(), circle.getCenterLon(), newDist);
     } else {
       Rectangle bbox = shape.getBoundingBox();
-      double newMinX = bbox.getMinX() - distErr;
-      double newMaxX = bbox.getMaxX() + distErr;
-      double newMinY = bbox.getMinY() - distErr;
-      double newMaxY = bbox.getMaxY() + distErr;
+      double newMinLon = bbox.left() - distErr;
+      double newMaxLon = bbox.right() + distErr;
+      double newMinLat = bbox.bottom() - distErr;
+      double newMaxLat = bbox.top() + distErr;
       if (ctx.isGeo()) {
-        if (newMinY < -90)
-          newMinY = -90;
-        if (newMaxY > 90)
-          newMaxY = 90;
-        if (newMinY == -90 || newMaxY == 90 || bbox.getWidth() + 2*distErr > 360) {
-          newMinX = -180;
-          newMaxX = 180;
+        if (newMinLat < GeoUtils.MIN_LAT_INCL)
+          newMinLat = GeoUtils.MIN_LAT_INCL;
+        if (newMaxLat > GeoUtils.MAX_LAT_INCL)
+          newMaxLat = GeoUtils.MAX_LAT_INCL;
+        if (newMinLat == GeoUtils.MIN_LAT_INCL || newMaxLat == GeoUtils.MAX_LAT_INCL
+            || bbox.getWidth() + 2 * distErr > 360) {
+          newMinLon = GeoUtils.MIN_LON_INCL;
+          newMaxLon = GeoUtils.MAX_LON_INCL;
         } else {
-          newMinX = DistanceUtils.normLonDEG(newMinX);
-          newMaxX = DistanceUtils.normLonDEG(newMaxX);
+          newMinLon = GeoUtils.normalizeLonDegrees(newMinLon);
+          newMaxLon = GeoUtils.normalizeLonDegrees(newMaxLon);
         }
       } else {
         //restrict to world bounds
-        newMinX = Math.max(newMinX, ctx.getWorldBounds().getMinX());
-        newMaxX = Math.min(newMaxX, ctx.getWorldBounds().getMaxX());
-        newMinY = Math.max(newMinY, ctx.getWorldBounds().getMinY());
-        newMaxY = Math.min(newMaxY, ctx.getWorldBounds().getMaxY());
+        newMinLon = Math.max(newMinLon, ctx.getWorldBounds().left());
+        newMaxLon = Math.min(newMaxLon, ctx.getWorldBounds().right());
+        newMinLat = Math.max(newMinLat, ctx.getWorldBounds().bottom());
+        newMaxLat = Math.min(newMaxLat, ctx.getWorldBounds().top());
       }
-      return ctx.makeRectangle(newMinX, newMaxX, newMinY, newMaxY);
+      return new Rectangle(newMinLat, newMaxLat, newMinLon, newMaxLon);
     }
   }
 
@@ -172,14 +174,15 @@ public class WithinPrefixTreeQuery extends AbstractVisitingPrefixTreeQuery {
       protected boolean visitPrefix(Cell cell) throws IOException {
         //cell.relate is based on the bufferedQueryShape; we need to examine what
         // the relation is against the queryShape
-        SpatialRelation visitRelation = cell.getShape().relate(queryShape);
+        final Rectangle r = cell.getRectangle();
+        Relation visitRelation = queryShape.relate(r.left(), r.right(), r.bottom(), r.top());
         if (cell.getLevel() == detailLevel) {
-          collectDocs(visitRelation.intersects() ? inside : outside);
+          collectDocs(visitRelation == Relation.INTERSECTS ? inside : outside);
           return false;
-        } else if (visitRelation == SpatialRelation.WITHIN) {
+        } else if (visitRelation == Relation.CONTAINS) {
           collectDocs(inside);
           return false;
-        } else if (visitRelation == SpatialRelation.DISJOINT) {
+        } else if (visitRelation == Relation.DISJOINT) {
           collectDocs(outside);
           return false;
         }
@@ -198,12 +201,13 @@ public class WithinPrefixTreeQuery extends AbstractVisitingPrefixTreeQuery {
        * detailLevel all intersect the queryShape.
        */
       private boolean allCellsIntersectQuery(Cell cell) {
-        SpatialRelation relate = cell.getShape().relate(queryShape);
+        Rectangle r = cell.getRectangle();
+        Relation relate = queryShape.relate(r.left(), r.right(), r.bottom(), r.top());
         if (cell.getLevel() == detailLevel)
-          return relate.intersects();
-        if (relate == SpatialRelation.WITHIN)
+          return relate == Relation.INTERSECTS;
+        if (relate == Relation.CONTAINS)
           return true;
-        if (relate == SpatialRelation.DISJOINT)
+        if (relate == Relation.DISJOINT)
           return false;
         // Note: Generating all these cells just to determine intersection is not ideal.
         // The real solution is LUCENE-4869.

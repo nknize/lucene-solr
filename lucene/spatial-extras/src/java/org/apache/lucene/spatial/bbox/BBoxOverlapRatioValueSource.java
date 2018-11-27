@@ -18,9 +18,11 @@ package org.apache.lucene.spatial.bbox;
 
 import java.util.concurrent.atomic.AtomicReference;
 
+import org.apache.lucene.geo.GeoUtils;
+import org.apache.lucene.geo.geometry.GeoShape.Relation;
+import org.apache.lucene.geo.geometry.Rectangle;
 import org.apache.lucene.search.Explanation;
 import org.apache.lucene.spatial.ShapeValuesSource;
-import org.locationtech.spatial4j.shape.Rectangle;
 
 /**
  * The algorithm is implemented as envelope on envelope (rect on rect) overlays rather than
@@ -130,8 +132,8 @@ public class BBoxOverlapRatioValueSource extends BBoxSimilarityValueSource {
   @Override
   protected double score(Rectangle target, AtomicReference<Explanation> exp) {
     // calculate "height": the intersection height between two boxes.
-    double top = Math.min(queryExtent.getMaxY(), target.getMaxY());
-    double bottom = Math.max(queryExtent.getMinY(), target.getMinY());
+    double top = Math.min(queryExtent.maxLat(), target.maxLat());
+    double bottom = Math.max(queryExtent.minLat(), target.minLat());
     double height = top - bottom;
     if (height < 0) {
       if (exp != null) {
@@ -145,15 +147,15 @@ public class BBoxOverlapRatioValueSource extends BBoxSimilarityValueSource {
     {
       Rectangle a = queryExtent;
       Rectangle b = target;
-      if (a.getCrossesDateLine() == b.getCrossesDateLine()) {
+      if (a.crossesDateline() == b.crossesDateline()) {
         //both either cross or don't
-        double left = Math.max(a.getMinX(), b.getMinX());
-        double right = Math.min(a.getMaxX(), b.getMaxX());
-        if (!a.getCrossesDateLine()) {//both don't
+        double left = Math.max(a.minLon(), b.minLon());
+        double right = Math.min(a.maxLon(), b.maxLon());
+        if (!a.crossesDateline()) {//both don't
           if (left <= right) {
             width = right - left;
-          } else if (isGeo && (Math.abs(a.getMinX()) == 180 || Math.abs(a.getMaxX()) == 180)
-              && (Math.abs(b.getMinX()) == 180 || Math.abs(b.getMaxX()) == 180)) {
+          } else if (isGeo && (Math.abs(a.minLon()) == GeoUtils.MAX_LON_INCL || Math.abs(a.maxLon()) == GeoUtils.MAX_LON_INCL)
+              && (Math.abs(b.minLon()) == GeoUtils.MAX_LON_INCL || Math.abs(b.maxLon()) == GeoUtils.MAX_LON_INCL)) {
             width = 0;//both adjacent to dateline
           } else {
             if (exp != null) {
@@ -165,18 +167,18 @@ public class BBoxOverlapRatioValueSource extends BBoxSimilarityValueSource {
           width = right - left + 360;
         }
       } else {
-        if (!a.getCrossesDateLine()) {//then flip
+        if (!a.crossesDateline()) {//then flip
           a = target;
           b = queryExtent;
         }
         //a crosses, b doesn't
-        double qryWestLeft = Math.max(a.getMinX(), b.getMinX());
-        double qryWestRight = b.getMaxX();
+        double qryWestLeft = Math.max(a.minLon(), b.minLon());
+        double qryWestRight = b.maxLon();
         if (qryWestLeft < qryWestRight)
           width += qryWestRight - qryWestLeft;
 
-        double qryEastLeft = b.getMinX();
-        double qryEastRight = Math.min(a.getMaxX(), b.getMaxX());
+        double qryEastLeft = b.minLon();
+        double qryEastRight = Math.min(a.maxLon(), b.maxLon());
         if (qryEastLeft < qryEastRight)
           width += qryEastRight - qryEastLeft;
 
@@ -199,7 +201,8 @@ public class BBoxOverlapRatioValueSource extends BBoxSimilarityValueSource {
     } else if (queryExtent.getWidth() > 0) {//horiz line
       queryRatio = width / queryExtent.getWidth();
     } else {
-      queryRatio = queryExtent.relate(target).intersects() ? 1 : 0;//could be optimized
+      final Relation relation = queryExtent.relate(target.minLat(), target.maxLat(), target.minLon(), target.maxLon());
+      queryRatio = relation == Relation.INTERSECTS ? 1 : 0;//could be optimized
     }
 
     double targetArea = calcArea(target.getWidth(), target.getHeight());
@@ -212,7 +215,8 @@ public class BBoxOverlapRatioValueSource extends BBoxSimilarityValueSource {
     } else if (target.getWidth() > 0) {//horiz line
       targetRatio = width / target.getWidth();
     } else {
-      targetRatio = target.relate(queryExtent).intersects() ? 1 : 0;//could be optimized
+      final Relation relation = queryExtent.relate(target.minLat(), target.maxLat(), target.minLon(), target.maxLon());
+      targetRatio = relation == Relation.INTERSECTS ? 1 : 0;//could be optimized
     }
     assert queryRatio >= 0 && queryRatio <= 1 : queryRatio;
     assert targetRatio >= 0 && targetRatio <= 1 : targetRatio;

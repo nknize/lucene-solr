@@ -16,8 +16,8 @@
  */
 package org.apache.lucene.spatial.prefix.tree;
 
-import org.locationtech.spatial4j.shape.Point;
-import org.locationtech.spatial4j.shape.Shape;
+import org.apache.lucene.spatial.geometry.Geometry;
+import org.apache.lucene.spatial.geometry.Point;
 
 /**
  * Navigates a {@link org.apache.lucene.spatial.prefix.tree.SpatialPrefixTree} from a given cell (typically the world
@@ -30,12 +30,12 @@ class TreeCellIterator extends CellIterator {
   //This class uses a stack approach, which is more efficient than creating linked nodes. And it might more easily
   // pave the way for re-using Cell & CellIterator at a given level in the future.
 
-  private final Shape shapeFilter;//possibly null
+  private final Geometry shapeFilter;//possibly null
   private final CellIterator[] iterStack;//starts at level 1
   private int stackIdx;//-1 when done
   private boolean descend;
 
-  public TreeCellIterator(Shape shapeFilter, int detailLevel, Cell parentCell) {
+  public TreeCellIterator(Geometry shapeFilter, int detailLevel, Cell parentCell) {
     this.shapeFilter = shapeFilter;
     assert parentCell.getLevel() == 0;
     iterStack = new CellIterator[detailLevel];

@@ -16,8 +16,6 @@
  */
 package org.apache.lucene.spatial;
 
-import org.locationtech.spatial4j.context.SpatialContext;
-
 import org.apache.lucene.spatial.query.SpatialArgs;
 import org.apache.lucene.spatial.query.SpatialArgsParser;
 

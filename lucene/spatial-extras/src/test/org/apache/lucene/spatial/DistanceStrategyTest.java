@@ -22,6 +22,9 @@ import java.util.Arrays;
 import java.util.List;
 
 import com.carrotsearch.randomizedtesting.annotations.ParametersFactory;
+import org.apache.lucene.geo.geometry.Circle;
+import org.apache.lucene.geo.geometry.GeoShape;
+import org.apache.lucene.geo.geometry.Point;
 import org.apache.lucene.spatial.bbox.BBoxStrategy;
 import org.apache.lucene.spatial.prefix.RecursivePrefixTreeStrategy;
 import org.apache.lucene.spatial.prefix.TermQueryPrefixTreeStrategy;
@@ -29,12 +32,9 @@ import org.apache.lucene.spatial.prefix.tree.GeohashPrefixTree;
 import org.apache.lucene.spatial.prefix.tree.PackedQuadPrefixTree;
 import org.apache.lucene.spatial.prefix.tree.QuadPrefixTree;
 import org.apache.lucene.spatial.prefix.tree.SpatialPrefixTree;
-import org.apache.lucene.spatial.serialized.SerializedDVStrategy;
+import org.apache.lucene.spatial.serialized.LegacySerializedDVStrategy;
 import org.apache.lucene.spatial.vector.PointVectorStrategy;
 import org.junit.Test;
-import org.locationtech.spatial4j.context.SpatialContext;
-import org.locationtech.spatial4j.shape.Point;
-import org.locationtech.spatial4j.shape.Shape;
 
 public class DistanceStrategyTest extends StrategyTestCase {
   @ParametersFactory(argumentFormatting = "strategy=%s")
@@ -68,7 +68,7 @@ public class DistanceStrategyTest extends StrategyTestCase {
     strategy = BBoxStrategy.newInstance(ctx, "bbox");
     ctorArgs.add(new Object[]{strategy.getFieldName(), strategy});
 
-    strategy = new SerializedDVStrategy(ctx, "serialized");
+    strategy = new LegacySerializedDVStrategy(ctx, "serialized");
     ctorArgs.add(new Object[]{strategy.getFieldName(), strategy});
 
     return ctorArgs;
@@ -81,26 +81,26 @@ public class DistanceStrategyTest extends StrategyTestCase {
 
   @Test
   public void testDistanceOrder() throws IOException {
-    adoc("100", ctx.makePoint(2, 1));
-    adoc("101", ctx.makePoint(-1, 4));
-    adoc("103", (Shape)null);//test score for nothing
+    adoc("100", new Point(1, 2));
+    adoc("101", new Point(4, -1));
+    adoc("103", (GeoShape)null);//test score for nothing
     commit();
     //FYI distances are in docid order
-    checkDistValueSource(ctx.makePoint(4, 3), 2.8274937f, 5.0898066f, 180f);
-    checkDistValueSource(ctx.makePoint(0, 4), 3.6043684f, 0.9975641f, 180f);
+    checkDistValueSource(new Point(3, 4), 2.8274937f, 5.0898066f, 180f);
+    checkDistValueSource(new Point(4, 0), 3.6043684f, 0.9975641f, 180f);
   }
 
   @Test
   public void testRecipScore() throws IOException {
-    Point p100 = ctx.makePoint(2.02, 0.98);
+    Point p100 = new Point(0.98, 2.02);
     adoc("100", p100);
-    Point p101 = ctx.makePoint(-1.001, 4.001);
+    Point p101 = new Point(4.001, -1.001);
     adoc("101", p101);
-    adoc("103", (Shape)null);//test score for nothing
+    adoc("103", (GeoShape)null);//test score for nothing
     commit();
 
-    double dist = ctx.getDistCalc().distance(p100, p101);
-    Shape queryShape = ctx.makeCircle(2.01, 0.99, dist);
+    double dist = SpatialContext.calculateDistance(p100.lat(), p100.lon(), p101.lat(), p101.lon());
+    GeoShape queryShape = new Circle(2.01, 0.99, dist);
     checkValueSource(strategy.makeRecipDistanceValueSource(queryShape),
         new float[]{1.00f, 0.10f, 0f}, 0.09f);
   }

@@ -24,8 +24,8 @@ import org.apache.lucene.search.SegmentCacheable;
 import org.apache.lucene.search.TwoPhaseIterator;
 import org.apache.lucene.spatial.ShapeValues;
 import org.apache.lucene.spatial.ShapeValuesSource;
+import org.apache.lucene.spatial.geometry.Geometry;
 import org.apache.lucene.spatial.query.SpatialOperation;
-import org.locationtech.spatial4j.shape.Shape;
 
 /**
  * Compares a shape from a provided {@link ShapeValuesSource} with a given Shape and sees
@@ -41,16 +41,16 @@ import org.locationtech.spatial4j.shape.Shape;
 public class ShapeValuesPredicate implements SegmentCacheable {
   private final ShapeValuesSource shapeValuesource;//the left hand side
   private final SpatialOperation op;
-  private final Shape queryShape;//the right hand side (constant)
+  private final Geometry queryShape;//the right hand side (constant)
 
   /**
    *
-   * @param shapeValuesource Must yield {@link Shape} instances from its objectVal(doc). If null
+   * @param shapeValuesource Must yield {@link Geometry} instances from its objectVal(doc). If null
    *                         then the result is false. This is the left-hand (indexed) side.
    * @param op the predicate
    * @param queryShape The shape on the right-hand (query) side.
    */
-  public ShapeValuesPredicate(ShapeValuesSource shapeValuesource, SpatialOperation op, Shape queryShape) {
+  public ShapeValuesPredicate(ShapeValuesSource shapeValuesource, SpatialOperation op, Geometry queryShape) {
     this.shapeValuesource = shapeValuesource;
     this.op = op;
     this.queryShape = queryShape;

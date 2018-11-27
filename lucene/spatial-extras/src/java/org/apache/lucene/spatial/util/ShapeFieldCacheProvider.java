@@ -16,9 +16,9 @@
  */
 package org.apache.lucene.spatial.util;
 
-import org.locationtech.spatial4j.shape.Shape;
 import org.apache.lucene.index.*;
 import org.apache.lucene.search.DocIdSetIterator;
+import org.apache.lucene.spatial.geometry.Geometry;
 import org.apache.lucene.util.BytesRef;
 
 import java.io.IOException;
@@ -34,7 +34,7 @@ import java.util.logging.Logger;
  *
  * @lucene.internal
  */
-public abstract class ShapeFieldCacheProvider<T extends Shape> {
+public abstract class ShapeFieldCacheProvider<T extends Geometry> {
   private Logger log = Logger.getLogger(getClass().getName());
 
   // it may be a List<T> or T

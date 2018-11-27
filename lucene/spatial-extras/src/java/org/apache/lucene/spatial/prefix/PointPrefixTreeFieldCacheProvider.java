@@ -16,7 +16,7 @@
  */
 package org.apache.lucene.spatial.prefix;
 
-import org.locationtech.spatial4j.shape.Point;
+import org.apache.lucene.spatial.geometry.Point;
 import org.apache.lucene.spatial.prefix.tree.Cell;
 import org.apache.lucene.spatial.prefix.tree.SpatialPrefixTree;
 import org.apache.lucene.spatial.util.ShapeFieldCacheProvider;
@@ -42,7 +42,7 @@ public class PointPrefixTreeFieldCacheProvider extends ShapeFieldCacheProvider<P
   protected Point readShape(BytesRef term) {
     scanCell = grid.readCell(term, scanCell);
     if (scanCell.getLevel() == grid.getMaxLevels())
-      return scanCell.getShape().getCenter();
+      return scanCell.getShape().center();
     return null;
   }
 }

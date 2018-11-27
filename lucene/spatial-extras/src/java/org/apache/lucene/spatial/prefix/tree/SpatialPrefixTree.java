@@ -16,8 +16,8 @@
  */
 package org.apache.lucene.spatial.prefix.tree;
 
-import org.locationtech.spatial4j.context.SpatialContext;
-import org.locationtech.spatial4j.shape.Shape;
+import org.apache.lucene.spatial.SpatialContext;
+import org.apache.lucene.spatial.geometry.Geometry;
 import org.apache.lucene.util.BytesRef;
 
 /**
@@ -107,7 +107,7 @@ public abstract class SpatialPrefixTree {
    * @param detailLevel the maximum detail level to get cells for
    * @return the matching cells
    */
-  public CellIterator getTreeCellIterator(Shape shape, int detailLevel) {
+  public CellIterator getTreeCellIterator(Geometry shape, int detailLevel) {
     if (detailLevel > maxLevels) {
       throw new IllegalArgumentException("detailLevel > maxLevels");
     }

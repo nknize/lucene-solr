@@ -22,6 +22,10 @@ import java.util.List;
 import java.util.Set;
 
 import com.carrotsearch.randomizedtesting.annotations.ParametersFactory;
+import org.apache.lucene.geo.GeoUtils;
+import org.apache.lucene.geo.geometry.Circle;
+import org.apache.lucene.geo.geometry.GeoShape;
+import org.apache.lucene.geo.geometry.Point;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.spatial.prefix.RecursivePrefixTreeStrategy;
 import org.apache.lucene.spatial.prefix.TermQueryPrefixTreeStrategy;
@@ -32,10 +36,6 @@ import org.apache.lucene.spatial.query.SpatialArgs;
 import org.apache.lucene.spatial.query.SpatialOperation;
 import org.apache.lucene.spatial.vector.PointVectorStrategy;
 import org.junit.Test;
-import org.locationtech.spatial4j.context.SpatialContext;
-import org.locationtech.spatial4j.distance.DistanceUtils;
-import org.locationtech.spatial4j.shape.Point;
-import org.locationtech.spatial4j.shape.Shape;
 
 /**
  * Based off of Solr 3's SpatialFilterTest.
@@ -78,19 +78,19 @@ public class PortedSolr3Test extends StrategyTestCase {
 
   private void setupDocs() throws Exception {
     super.deleteAll();
-    adoc("1", ctx.makePoint(-79.9289094, 32.7693246));
-    adoc("2", ctx.makePoint(-80.9289094, 33.7693246));
-    adoc("3", ctx.makePoint(50.9289094, -32.7693246));
-    adoc("4", ctx.makePoint(60.9289094, -50.7693246));
-    adoc("5", ctx.makePoint(0, 0));
-    adoc("6", ctx.makePoint(0.1, 0.1));
-    adoc("7", ctx.makePoint(-0.1, -0.1));
-    adoc("8", ctx.makePoint(179.9, 0));
-    adoc("9", ctx.makePoint(-179.9, 0));
-    adoc("10", ctx.makePoint(50, 89.9));
-    adoc("11", ctx.makePoint(-130, 89.9));
-    adoc("12", ctx.makePoint(50, -89.9));
-    adoc("13", ctx.makePoint(-130, -89.9));
+    adoc("1", new Point(32.7693246, -79.9289094));
+    adoc("2", new Point(33.7693246, -80.9289094));
+    adoc("3", new Point(-32.7693246, 50.9289094));
+    adoc("4", new Point(-50.7693246, 60.9289094));
+    adoc("5", new Point(0, 0));
+    adoc("6", new Point(0.1, 0.1));
+    adoc("7", new Point(-0.1, -0.1));
+    adoc("8", new Point(0, 179.9));
+    adoc("9", new Point(0, -179.9));
+    adoc("10", new Point(89.9, 50.0));
+    adoc("11", new Point(89.9, -130.0));
+    adoc("12", new Point(-89.9, 50));
+    adoc("13", new Point(-89.9, -130));
     commit();
   }
 
@@ -100,39 +100,39 @@ public class PortedSolr3Test extends StrategyTestCase {
     setupDocs();
     //Try some edge cases
       //NOTE: 2nd arg is distance in kilometers
-    checkHitsCircle(ctx.makePoint(1, 1), 175, 3, 5, 6, 7);
-    checkHitsCircle(ctx.makePoint(179.8, 0), 200, 2, 8, 9);
-    checkHitsCircle(ctx.makePoint(50, 89.8), 200, 2, 10, 11);//this goes over the north pole
-    checkHitsCircle(ctx.makePoint(50, -89.8), 200, 2, 12, 13);//this goes over the south pole
+    checkHitsCircle(new Point(1, 1), 175, 3, 5, 6, 7);
+    checkHitsCircle(new Point(0, 179.8), 200, 2, 8, 9);
+    checkHitsCircle(new Point(89.8, 50), 200, 2, 10, 11);//this goes over the north pole
+    checkHitsCircle(new Point(-89.8, 50), 200, 2, 12, 13);//this goes over the south pole
     //try some normal cases
-    checkHitsCircle(ctx.makePoint(-80.0, 33.0), 300, 2);
+    checkHitsCircle(new Point(33.0, -80.0), 300, 2);
     //large distance
-    checkHitsCircle(ctx.makePoint(1, 1), 5000, 3, 5, 6, 7);
+    checkHitsCircle(new Point(1, 1), 5000, 3, 5, 6, 7);
     //Because we are generating a box based on the west/east longitudes and the south/north latitudes, which then
     //translates to a range query, which is slightly more inclusive.  Thus, even though 0.0 is 15.725 kms away,
     //it will be included, b/c of the box calculation.
-    checkHitsBBox(ctx.makePoint(0.1, 0.1), 15, 2, 5, 6);
+    checkHitsBBox(new Point(0.1, 0.1), 15, 2, 5, 6);
     //try some more
     deleteAll();
-    adoc("14", ctx.makePoint(5, 0));
-    adoc("15", ctx.makePoint(15, 0));
+    adoc("14", new Point(0, 5));
+    adoc("15", new Point(0, 15));
     //3000KM from 0,0, see http://www.movable-type.co.uk/scripts/latlong.html
-    adoc("16", ctx.makePoint(19.79750, 18.71111));
-    adoc("17", ctx.makePoint(-95.436643, 44.043900));
+    adoc("16", new Point(18.71111, 19.79750));
+    adoc("17", new Point(44.043900, -95.436643));
     commit();
 
-    checkHitsCircle(ctx.makePoint(0, 0), 1000, 1, 14);
-    checkHitsCircle(ctx.makePoint(0, 0), 2000, 2, 14, 15);
-    checkHitsBBox(ctx.makePoint(0, 0), 3000, 3, 14, 15, 16);
-    checkHitsCircle(ctx.makePoint(0, 0), 3001, 3, 14, 15, 16);
-    checkHitsCircle(ctx.makePoint(0, 0), 3000.1, 3, 14, 15, 16);
+    checkHitsCircle(new Point(0, 0), 1000, 1, 14);
+    checkHitsCircle(new Point(0, 0), 2000, 2, 14, 15);
+    checkHitsBBox(new Point(0, 0), 3000, 3, 14, 15, 16);
+    checkHitsCircle(new Point(0, 0), 3001, 3, 14, 15, 16);
+    checkHitsCircle(new Point(0, 0), 3000.1, 3, 14, 15, 16);
 
     //really fine grained distance and reflects some of the vagaries of how we are calculating the box
-    checkHitsCircle(ctx.makePoint(-96.789603, 43.517030), 109, 0);
+    checkHitsCircle(new Point(43.517030, -96.789603), 109, 0);
 
     // falls outside of the real distance, but inside the bounding box
-    checkHitsCircle(ctx.makePoint(-96.789603, 43.517030), 110, 0);
-    checkHitsBBox(ctx.makePoint(-96.789603, 43.517030), 110, 1, 17);
+    checkHitsCircle(new Point(43.517030, -96.789603), 110, 0);
+    checkHitsBBox(new Point(43.517030, -96.789603), 110, 1, 17);
   }
 
   //---- these are similar to Solr test methods
@@ -145,11 +145,12 @@ public class PortedSolr3Test extends StrategyTestCase {
   }
 
   private void _checkHits(boolean bbox, Point pt, double distKM, int assertNumFound, int... assertIds) {
-    SpatialOperation op = SpatialOperation.Intersects;
-    double distDEG = DistanceUtils.dist2Degrees(distKM, DistanceUtils.EARTH_MEAN_RADIUS_KM);
-    Shape shape = ctx.makeCircle(pt, distDEG);
-    if (bbox)
+    SpatialOperation op = SpatialOperation.INTERSECTS;
+    double distDEG = GeoUtils.distanceToDegrees(distKM, GeoUtils.EARTH_MEAN_RADIUS_METERS / 1000D);
+    GeoShape shape = new Circle(pt.lat(), pt.lon(), distDEG);
+    if (bbox) {
       shape = shape.getBoundingBox();
+    }
 
     SpatialArgs args = new SpatialArgs(op,shape);
     //args.setDistPrecision(0.025);

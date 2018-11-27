@@ -19,8 +19,9 @@ package org.apache.lucene.spatial.prefix;
 import java.io.IOException;
 import java.util.Iterator;
 
-import org.locationtech.spatial4j.shape.Shape;
-import org.locationtech.spatial4j.shape.SpatialRelation;
+import org.apache.lucene.spatial.geometry.Geometry;
+import org.apache.lucene.spatial.geometry.Geometry.Relation;
+import org.apache.lucene.spatial.geometry.Rectangle;
 import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.index.TermsEnum;
 import org.apache.lucene.search.DocIdSet;
@@ -52,7 +53,7 @@ public abstract class AbstractVisitingPrefixTreeQuery extends AbstractPrefixTree
 
   protected final int prefixGridScanLevel;//at least one less than grid.getMaxLevels()
 
-  public AbstractVisitingPrefixTreeQuery(Shape queryShape, String fieldName, SpatialPrefixTree grid,
+  public AbstractVisitingPrefixTreeQuery(Geometry queryShape, String fieldName, SpatialPrefixTree grid,
                                          int detailLevel, int prefixGridScanLevel) {
     super(queryShape, fieldName, grid, detailLevel);
     this.prefixGridScanLevel = Math.max(0, Math.min(prefixGridScanLevel, grid.getMaxLevels() - 1));
@@ -328,8 +329,9 @@ public abstract class AbstractVisitingPrefixTreeQuery extends AbstractPrefixTree
      * {@link #visitPrefix(org.apache.lucene.spatial.prefix.tree.Cell)}.
      */
     protected void visitScanned(Cell cell) throws IOException {
-      final SpatialRelation relate = cell.getShape().relate(queryShape);
-      if (relate.intersects()) {
+      Rectangle r = cell.getRectangle();
+      final Relation relate = r.relate(queryShape); // queryShape.relate(r.minLat, r.maxLat, r.minLon, r.maxLon);
+      if (relate.intersects() == true) {
         cell.setShapeRel(relate);//just being pedantic
         if (cell.isLeaf()) {
           visitLeaf(cell);

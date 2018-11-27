@@ -19,10 +19,10 @@ package org.apache.lucene.spatial;
 
 import java.io.IOException;
 
-import org.locationtech.spatial4j.shape.Shape;
+import org.apache.lucene.spatial.geometry.Geometry;
 
 /**
- * Iterator over {@link Shape} objects for an index segment
+ * Iterator over {@link Geometry} objects for an index segment
  */
 public abstract class ShapeValues {
 
@@ -34,8 +34,8 @@ public abstract class ShapeValues {
   public abstract boolean advanceExact(int doc) throws IOException;
 
   /**
-   * Returns a {@link Shape} for the current document
+   * Returns a {@link Geometry} for the current document
    */
-  public abstract Shape value() throws IOException;
+  public abstract Geometry value() throws IOException;
 
 }

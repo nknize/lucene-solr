@@ -26,9 +26,9 @@ import org.apache.lucene.geo.geometry.Rectangle;
 import org.apache.lucene.index.PointValues.Relation;
 import org.apache.lucene.util.LuceneTestCase;
 
-/** Test Polygon2D impl */
-public class TestPolygon2D extends LuceneTestCase {
-
+/** Test EdgeTree impl */
+public class TestEdgeTree extends LuceneTestCase {
+  
   /** Three boxes, an island inside a hole inside a shape */
   public void testMultiPolygon() {
     Polygon hole = new Polygon(new double[] { -10, -10, 10, 10, -10 }, new double[] { -10, 10, 10, -10, -10 });
@@ -97,8 +97,8 @@ public class TestPolygon2D extends LuceneTestCase {
         double longitude = point[1];
         // if the point is within poly, then it should be in our bounding box
         if (impl.contains(latitude, longitude)) {
-          assertTrue(latitude >= polygon.minLat && latitude <= polygon.maxLat);
-          assertTrue(longitude >= polygon.minLon && longitude <= polygon.maxLon);
+          assertTrue(latitude >= polygon.minLat() && latitude <= polygon.maxLat());
+          assertTrue(longitude >= polygon.minLon() && longitude <= polygon.maxLon());
         }
       }
     }

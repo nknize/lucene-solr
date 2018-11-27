@@ -19,7 +19,7 @@ package org.apache.lucene.spatial.prefix.tree;
 
 
 import com.google.common.geometry.S2CellId;
-import org.locationtech.spatial4j.shape.Shape;
+import org.apache.lucene.spatial.geometry.Geometry;
 import org.locationtech.spatial4j.shape.ShapeFactory;
 
 /**
@@ -36,5 +36,5 @@ public interface S2ShapeFactory extends ShapeFactory{
    * @param cellId The S2 cell id
    * @return the shape representing the cell.
    */
-  Shape getS2CellShape(S2CellId cellId);
+  Geometry getS2CellShape(S2CellId cellId);
 }

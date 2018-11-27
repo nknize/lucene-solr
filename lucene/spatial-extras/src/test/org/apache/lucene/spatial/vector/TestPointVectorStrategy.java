@@ -21,17 +21,18 @@ import java.text.ParseException;
 
 import org.apache.lucene.document.Document;
 import org.apache.lucene.document.FieldType;
+import org.apache.lucene.geo.geometry.Circle;
+import org.apache.lucene.geo.geometry.Point;
+import org.apache.lucene.geo.geometry.Rectangle;
 import org.apache.lucene.search.MatchAllDocsQuery;
 import org.apache.lucene.search.Query;
+import org.apache.lucene.spatial.SpatialContext;
 import org.apache.lucene.spatial.SpatialMatchConcern;
 import org.apache.lucene.spatial.StrategyTestCase;
 import org.apache.lucene.spatial.query.SpatialArgs;
 import org.apache.lucene.spatial.query.SpatialOperation;
 import org.junit.Before;
 import org.junit.Test;
-import org.locationtech.spatial4j.context.SpatialContext;
-import org.locationtech.spatial4j.shape.Circle;
-import org.locationtech.spatial4j.shape.Point;
 
 public class TestPointVectorStrategy extends StrategyTestCase {
 
@@ -45,8 +46,8 @@ public class TestPointVectorStrategy extends StrategyTestCase {
   @Test
   public void testCircleShapeSupport() {
     this.strategy = PointVectorStrategy.newInstance(ctx, getClass().getSimpleName());
-    Circle circle = ctx.makeCircle(ctx.makePoint(0, 0), 10);
-    SpatialArgs args = new SpatialArgs(SpatialOperation.Intersects, circle);
+    Circle circle = new Circle(0, 0, 10);
+    SpatialArgs args = new SpatialArgs(SpatialOperation.INTERSECTS, circle);
     Query query = this.strategy.makeQuery(args);
 
     assertNotNull(query);
@@ -55,8 +56,8 @@ public class TestPointVectorStrategy extends StrategyTestCase {
   @Test(expected = UnsupportedOperationException.class)
   public void testInvalidQueryShape() {
     this.strategy = PointVectorStrategy.newInstance(ctx, getClass().getSimpleName());
-    Point point = ctx.makePoint(0, 0);
-    SpatialArgs args = new SpatialArgs(SpatialOperation.Intersects, point);
+    Point point = new Point(0, 0);
+    SpatialArgs args = new SpatialArgs(SpatialOperation.INTERSECTS, point);
     this.strategy.makeQuery(args);
   }
 
@@ -94,7 +95,7 @@ public class TestPointVectorStrategy extends StrategyTestCase {
 
     // Test a query fails without point values
     expectThrows(UnsupportedOperationException.class, () -> {
-      SpatialArgs args = new SpatialArgs(SpatialOperation.Intersects, ctx.makeRectangle(-10.0, 10.0, -5.0, 5.0));
+      SpatialArgs args = new SpatialArgs(SpatialOperation.INTERSECTS, new Rectangle(-5.0, 5.0, -10.0, 10.0));
       this.strategy.makeQuery(args);
     });
   }

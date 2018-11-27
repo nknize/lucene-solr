@@ -25,8 +25,8 @@ import org.apache.lucene.index.NumericDocValues;
 import org.apache.lucene.search.DoubleValues;
 import org.apache.lucene.search.DoubleValuesSource;
 import org.apache.lucene.search.IndexSearcher;
-import org.locationtech.spatial4j.distance.DistanceCalculator;
-import org.locationtech.spatial4j.shape.Point;
+import org.apache.lucene.spatial.SpatialContext;
+import org.apache.lucene.spatial.geometry.Point;
 
 /**
  * A DoubleValuesSource that returns the distance for a {@link PointVectorStrategy}.
@@ -71,13 +71,14 @@ public class DistanceValueSource extends DoubleValuesSource {
     return DoubleValues.withDefault(new DoubleValues() {
 
       private final Point from = DistanceValueSource.this.from;
-      private final DistanceCalculator calculator = strategy.getSpatialContext().getDistCalc();
+//      private final DistanceCalculator calculator = strategy.getSpatialContext().getDistCalc();
 
       @Override
       public double doubleValue() throws IOException {
         double x = Double.longBitsToDouble(ptX.longValue());
         double y = Double.longBitsToDouble(ptY.longValue());
-        return calculator.distance(from, x, y) * multiplier;
+        return SpatialContext.calculateDistance(from.y(), from.x(), y, x);
+//        return calculator.distance(pointS4J, x, y) * multiplier;
       }
 
       @Override

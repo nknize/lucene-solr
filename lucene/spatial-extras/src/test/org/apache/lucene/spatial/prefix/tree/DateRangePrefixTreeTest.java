@@ -24,11 +24,11 @@ import java.util.Calendar;
 import java.util.GregorianCalendar;
 
 import com.carrotsearch.randomizedtesting.annotations.ParametersFactory;
+import org.apache.lucene.geo.geometry.GeoShape;
 import org.apache.lucene.spatial.prefix.tree.NumberRangePrefixTree.UnitNRShape;
+import org.apache.lucene.geo.geometry.GeoShape.Relation;
 import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.LuceneTestCase;
-import org.locationtech.spatial4j.shape.Shape;
-import org.locationtech.spatial4j.shape.SpatialRelation;
 
 public class DateRangePrefixTreeTest extends LuceneTestCase {
 
@@ -174,20 +174,20 @@ public class DateRangePrefixTreeTest extends LuceneTestCase {
 
   public void testShapeRelations() throws ParseException {
     //note: left range is 264000 at the thousand year level whereas right value is exact year
-    assertEquals(SpatialRelation.WITHIN,
+    assertEquals(Relation.WITHIN,
         tree.parseShape("[-264000 TO -264000-11-20]").relate(tree.parseShape("-264000")));
 
-    Shape shapeA = tree.parseShape("[3122-01-23 TO 3122-11-27]");
-    Shape shapeB = tree.parseShape("[3122-08 TO 3122-11]");
-    assertEquals(SpatialRelation.INTERSECTS, shapeA.relate(shapeB));
+    GeoShape shapeA = tree.parseShape("[3122-01-23 TO 3122-11-27]");
+    GeoShape shapeB = tree.parseShape("[3122-08 TO 3122-11]");
+    assertEquals(Relation.INTERSECTS, shapeA.relate(shapeB));
 
     shapeA = tree.parseShape("3122");
     shapeB = tree.parseShape("[* TO 3122-10-31]");
-    assertEquals(SpatialRelation.INTERSECTS, shapeA.relate(shapeB));
+    assertEquals(Relation.INTERSECTS, shapeA.relate(shapeB));
 
     shapeA = tree.parseShape("[3122-05-28 TO 3122-06-29]");
     shapeB = tree.parseShape("[3122 TO 3122-04]");
-    assertEquals(SpatialRelation.DISJOINT, shapeA.relate(shapeB));
+    assertEquals(Relation.DISJOINT, shapeA.relate(shapeB));
   }
 
   public void testShapeRangeOptimizer() throws ParseException {

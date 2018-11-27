@@ -27,7 +27,7 @@ import org.apache.lucene.spatial.ShapeValues;
 import org.apache.lucene.spatial.ShapeValuesSource;
 import org.apache.lucene.spatial.SpatialStrategy;
 import org.apache.lucene.spatial.composite.CompositeSpatialStrategy;
-import org.apache.lucene.spatial.serialized.SerializedDVStrategy;
+import org.apache.lucene.spatial.serialized.LegacySerializedDVStrategy;
 import org.apache.solr.common.SolrDocument;
 import org.apache.solr.common.SolrException;
 import org.apache.solr.common.SolrException.ErrorCode;
@@ -94,8 +94,8 @@ public class GeoTransformerFactory extends TransformerFactory
       shapes = ((CompositeSpatialStrategy)strategy)
           .getGeometryStrategy().makeShapeValueSource();
     }
-    else if(strategy instanceof SerializedDVStrategy) {
-      shapes = ((SerializedDVStrategy)strategy)
+    else if(strategy instanceof LegacySerializedDVStrategy) {
+      shapes = ((LegacySerializedDVStrategy)strategy)
           .makeShapeValueSource();
     }
     else

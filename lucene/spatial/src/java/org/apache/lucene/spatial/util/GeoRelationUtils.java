@@ -16,6 +16,11 @@
  */
 package org.apache.lucene.spatial.util;
 
+import org.apache.lucene.spatial.geometry.GeoRectangle;
+import org.apache.lucene.spatial.geometry.Geometry.Relation;
+import org.apache.lucene.spatial.geometry.Rectangle;
+import org.apache.lucene.util.SloppyMath;
+
 /**
  * Reusable geo-relation utility methods
  */
@@ -72,4 +77,46 @@ public class GeoRelationUtils {
                                        final double bMinLat, final double bMaxLat, final double bMinLon, final double bMaxLon) {
     return !((aMaxLon < bMinLon || aMinLon > bMaxLon || aMaxLat < bMinLat || aMinLat > bMaxLat));
   }
+
+  public static Relation relate(
+      double minLat, double maxLat, double minLon, double maxLon,
+      double lat, double lon, double distanceSortKey, double axisLat) {
+
+    if (minLon > maxLon) {
+      throw new IllegalArgumentException("Box crosses the dateline");
+    }
+
+    if ((lon < minLon || lon > maxLon) && (axisLat + GeoRectangle.AXISLAT_ERROR < minLat || axisLat - GeoRectangle.AXISLAT_ERROR > maxLat)) {
+      // circle not fully inside / crossing axis
+      if (SloppyMath.haversinSortKey(lat, lon, minLat, minLon) > distanceSortKey &&
+          SloppyMath.haversinSortKey(lat, lon, minLat, maxLon) > distanceSortKey &&
+          SloppyMath.haversinSortKey(lat, lon, maxLat, minLon) > distanceSortKey &&
+          SloppyMath.haversinSortKey(lat, lon, maxLat, maxLon) > distanceSortKey) {
+        // no points inside
+        return Relation.DISJOINT;
+      }
+    }
+
+    if (within90LonDegrees(lon, minLon, maxLon) &&
+        SloppyMath.haversinSortKey(lat, lon, minLat, minLon) <= distanceSortKey &&
+        SloppyMath.haversinSortKey(lat, lon, minLat, maxLon) <= distanceSortKey &&
+        SloppyMath.haversinSortKey(lat, lon, maxLat, minLon) <= distanceSortKey &&
+        SloppyMath.haversinSortKey(lat, lon, maxLat, maxLon) <= distanceSortKey) {
+      // we are fully enclosed, collect everything within this subtree
+      return Relation.WITHIN;
+    }
+
+    return Relation.CROSSES;
+  }
+
+  /** Return whether all points of {@code [minLon,maxLon]} are within 90 degrees of {@code lon}. */
+  static boolean within90LonDegrees(double lon, double minLon, double maxLon) {
+    if (maxLon <= lon - 180) {
+      lon -= 360;
+    } else if (minLon >= lon + 180) {
+      lon += 360;
+    }
+    return maxLon - lon < 90 && lon - minLon < 90;
+  }
+
 }

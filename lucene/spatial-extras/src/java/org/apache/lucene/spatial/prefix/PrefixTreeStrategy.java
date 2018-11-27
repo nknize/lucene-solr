@@ -26,14 +26,14 @@ import org.apache.lucene.document.FieldType;
 import org.apache.lucene.index.IndexOptions;
 import org.apache.lucene.index.IndexReaderContext;
 import org.apache.lucene.search.DoubleValuesSource;
+import org.apache.lucene.spatial.geometry.Geometry;
 import org.apache.lucene.spatial.SpatialStrategy;
+import org.apache.lucene.spatial.geometry.Point;
 import org.apache.lucene.spatial.prefix.tree.Cell;
 import org.apache.lucene.spatial.prefix.tree.SpatialPrefixTree;
 import org.apache.lucene.spatial.query.SpatialArgs;
 import org.apache.lucene.spatial.util.ShapeFieldCacheDistanceValueSource;
 import org.apache.lucene.util.Bits;
-import org.locationtech.spatial4j.shape.Point;
-import org.locationtech.spatial4j.shape.Shape;
 
 /**
  * An abstract SpatialStrategy based on {@link SpatialPrefixTree}. The two
@@ -47,16 +47,16 @@ import org.locationtech.spatial4j.shape.Shape;
  * <li>Can index any shape; however only {@link RecursivePrefixTreeStrategy}
  * can effectively search non-point shapes.</li>
  * <li>Can index a variable number of shapes per field value. This strategy
- * can do it via multiple calls to {@link #createIndexableFields(org.locationtech.spatial4j.shape.Shape)}
+ * can do it via multiple calls to {@link #createIndexableFields(Geometry)}
  * for a document or by giving it some sort of Shape aggregate (e.g. JTS
  * WKT MultiPoint).  The shape's boundary is approximated to a grid precision.
  * </li>
  * <li>Can query with any shape.  The shape's boundary is approximated to a grid
  * precision.</li>
- * <li>Only {@link org.apache.lucene.spatial.query.SpatialOperation#Intersects}
+ * <li>Only {@link org.apache.lucene.spatial.query.SpatialOperation#INTERSECTS}
  * is supported.  If only points are indexed then this is effectively equivalent
  * to IsWithin.</li>
- * <li>The strategy supports {@link #makeDistanceValueSource(org.locationtech.spatial4j.shape.Point,double)}
+ * <li>The strategy supports {@link #makeDistanceValueSource(Point,double)}
  * even for multi-valued data, so long as the indexed data is all points; the
  * behavior is undefined otherwise.  However, <em>it will likely be removed in
  * the future</em> in lieu of using another strategy with a more scalable
@@ -93,7 +93,7 @@ public abstract class PrefixTreeStrategy extends SpatialStrategy {
   }
 
   /**
-   * A memory hint used by {@link #makeDistanceValueSource(org.locationtech.spatial4j.shape.Point)}
+   * A memory hint used by {@link #makeDistanceValueSource(Point)}
    * for how big the initial size of each Document's array should be. The
    * default is 2.  Set this to slightly more than the default expected number
    * of points per document.
@@ -132,21 +132,21 @@ public abstract class PrefixTreeStrategy extends SpatialStrategy {
   }
 
   @Override
-  public Field[] createIndexableFields(Shape shape) {
+  public Field[] createIndexableFields(Geometry shape) {
     double distErr = SpatialArgs.calcDistanceFromErrPct(shape, distErrPct, ctx);
     return createIndexableFields(shape, distErr);
   }
 
   /**
-   * Turns {@link SpatialPrefixTree#getTreeCellIterator(Shape, int)} into a
+   * Turns {@link SpatialPrefixTree#getTreeCellIterator(Geometry, int)} into a
    * {@link org.apache.lucene.analysis.TokenStream}.
    */
-  public Field[] createIndexableFields(Shape shape, double distErr) {
+  public Field[] createIndexableFields(Geometry shape, double distErr) {
     int detailLevel = grid.getLevelForDistance(distErr);
     return createIndexableFields(shape, detailLevel);
   }
 
-  public Field[] createIndexableFields(Shape shape, int detailLevel) {
+  public Field[] createIndexableFields(Geometry shape, int detailLevel) {
     //TODO re-use TokenStream LUCENE-5776: Subclass Field, put cell iterator there, override tokenStream()
     Iterator<Cell> cells = createCellIteratorToIndex(shape, detailLevel, null);
     CellToBytesRefIterator cellToBytesRefIterator = newCellToBytesRefIterator();
@@ -162,9 +162,9 @@ public abstract class PrefixTreeStrategy extends SpatialStrategy {
     return new CellToBytesRefIterator();
   }
 
-  protected Iterator<Cell> createCellIteratorToIndex(Shape shape, int detailLevel, Iterator<Cell> reuse) {
+  protected Iterator<Cell> createCellIteratorToIndex(Geometry shape, int detailLevel, Iterator<Cell> reuse) {
     if (pointsOnly && !isPointShape(shape)) {
-      throw new IllegalArgumentException("pointsOnly is true yet a " + shape.getClass() + " is given for indexing");
+      throw new IllegalArgumentException("pointsOnly is true yet a " + shape.type() + " is given for indexing");
     }
     return grid.getTreeCellIterator(shape, detailLevel);//TODO should take a re-use iterator
   }
@@ -199,10 +199,10 @@ public abstract class PrefixTreeStrategy extends SpatialStrategy {
    * Computes spatial facets in two dimensions as a grid of numbers.  The data is often visualized as a so-called
    * "heatmap".
    *
-   * @see HeatmapFacetCounter#calcFacets(PrefixTreeStrategy, IndexReaderContext, Bits, Shape, int, int)
+   * @see HeatmapFacetCounter#calcFacets(PrefixTreeStrategy, IndexReaderContext, Bits, Geometry, int, int)
    */
   public HeatmapFacetCounter.Heatmap calcFacets(IndexReaderContext context, Bits topAcceptDocs,
-                                   Shape inputShape, final int facetLevel, int maxCells) throws IOException {
+                                                Geometry inputShape, final int facetLevel, int maxCells) throws IOException {
     return HeatmapFacetCounter.calcFacets(this, context, topAcceptDocs, inputShape, facetLevel, maxCells);
   }
 
@@ -211,7 +211,7 @@ public abstract class PrefixTreeStrategy extends SpatialStrategy {
    * have certain other shapes return true.
    * @lucene.experimental
    */
-  protected boolean isPointShape(Shape shape) {
+  protected boolean isPointShape(Geometry shape) {
     return shape instanceof Point;
   }
 }

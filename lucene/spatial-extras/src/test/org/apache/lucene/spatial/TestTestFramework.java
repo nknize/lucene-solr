@@ -16,8 +16,7 @@
  */
 package org.apache.lucene.spatial;
 
-import org.locationtech.spatial4j.context.SpatialContext;
-import org.locationtech.spatial4j.shape.Rectangle;
+import org.apache.lucene.geo.geometry.Rectangle;
 import org.apache.lucene.spatial.query.SpatialArgsParser;
 import org.apache.lucene.spatial.query.SpatialOperation;
 import org.apache.lucene.util.LuceneTestCase;
@@ -55,7 +54,7 @@ public class TestTestFramework extends LuceneTestCase {
     assertEquals( 1, sf.ids.size() );
     Assert.assertTrue( sf.ids.get(0).equals( "G5391959" ) );
     Assert.assertTrue( sf.args.getShape() instanceof Rectangle);
-    assertEquals(SpatialOperation.Intersects, sf.args.getOperation());
+    assertEquals(SpatialOperation.INTERSECTS, sf.args.getOperation());
   }
 
   @Test

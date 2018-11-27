@@ -1,27 +1,31 @@
 /*
- * Licensed to Elasticsearch under one or more contributor
- * license agreements. See the NOTICE file distributed with
- * this work for additional information regarding copyright
- * ownership. Elasticsearch licenses this file to you under
- * the Apache License, Version 2.0 (the "License"); you may
- * not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
  *
- *    http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 package org.apache.lucene.geo.geometry;
 
+import java.io.IOException;
+
 import org.apache.lucene.geo.GeoUtils;
+import org.apache.lucene.geo.parsers.WKTParser;
+import org.apache.lucene.store.OutputStreamDataOutput;
 
 /**
- * Created by nknize on 2/28/17.
+ * Represents a Point on the earth's surface in decimal degrees.
+ *
+ * @lucene.experimental
  */
 public class Point extends GeoShape {
   protected final double lat;
@@ -32,10 +36,7 @@ public class Point extends GeoShape {
     GeoUtils.checkLongitude(lon);
     this.lat = lat;
     this.lon = lon;
-    this.minLat = lat;
-    this.minLon = lon;
-    this.maxLat = lat;
-    this.maxLon = lon;
+    this.boundingBox = null;
   }
 
   @Override
@@ -67,11 +68,26 @@ public class Point extends GeoShape {
     return lon;
   }
 
+  @Override
+  public Rectangle getBoundingBox() {
+    throw new UnsupportedOperationException("Points do not have a bounding box");
+  }
+
+  @Override
+  public Point getCenter() {
+    return this;
+  }
+
+  @Override
+  public boolean hasArea() {
+    return false;
+  }
+
   public Relation relate(double minLat, double maxLat, double minLon, double maxLon) {
     if (lat < minLat || lat > maxLat || lon < minLon || lon > maxLon) {
       return Relation.DISJOINT;
     }
-    return Relation.INTERSECTS;
+    return Relation.WITHIN;
   }
 
   public Relation relate(GeoShape shape) {
@@ -88,7 +104,6 @@ public class Point extends GeoShape {
 
     if (Double.compare(point.lat, lat) != 0) return false;
     return Double.compare(point.lon, lon) == 0;
-
   }
 
   @Override
@@ -100,5 +115,27 @@ public class Point extends GeoShape {
     temp = Double.doubleToLongBits(lon);
     result = 31 * result + (int) (temp ^ (temp >>> 32));
     return result;
+  }
+
+  @Override
+  protected StringBuilder contentToWKT() {
+    return coordinateToWKT(lat, lon);
+  }
+
+  protected static StringBuilder coordinateToWKT(final double lat, final double lon) {
+    final StringBuilder sb = new StringBuilder();
+    sb.append(lon + WKTParser.SPACE + lat);
+    return sb;
+  }
+
+  @Override
+  protected void appendWKBContent(OutputStreamDataOutput out) throws IOException {
+    coordinateToWKB(lat, lon, out);
+  }
+
+  public static OutputStreamDataOutput coordinateToWKB(double lat, double lon, OutputStreamDataOutput out) throws IOException {
+    out.writeVLong(Double.doubleToRawLongBits(lon));  // lon
+    out.writeVLong(Double.doubleToRawLongBits(lat));  // lat
+    return out;
   }
 }

@@ -16,10 +16,11 @@
  */
 package org.apache.lucene.spatial.prefix;
 
-import org.locationtech.spatial4j.context.SpatialContext;
-import org.locationtech.spatial4j.distance.DistanceUtils;
-import org.locationtech.spatial4j.shape.Point;
-import org.locationtech.spatial4j.shape.Shape;
+import org.apache.lucene.geo.GeoUtils;
+import org.apache.lucene.geo.geometry.Circle;
+import org.apache.lucene.geo.geometry.GeoShape;
+import org.apache.lucene.geo.geometry.Point;
+import org.apache.lucene.spatial.SpatialContext;
 import org.apache.lucene.spatial.SpatialMatchConcern;
 import org.apache.lucene.spatial.StrategyTestCase;
 import org.apache.lucene.spatial.prefix.tree.GeohashPrefixTree;
@@ -60,7 +61,7 @@ public class TestRecursivePrefixTreeStrategy extends StrategyTestCase {
     init(GeohashPrefixTree.getMaxLevelsPossible());
     GeohashPrefixTree grid = (GeohashPrefixTree) ((RecursivePrefixTreeStrategy) strategy).getGrid();
     //DWS: I know this to be true.  11 is needed for one meter
-    double degrees = DistanceUtils.dist2Degrees(0.001, DistanceUtils.EARTH_MEAN_RADIUS_KM);
+    double degrees = GeoUtils.distanceToDegrees(0.001, GeoUtils.EARTH_MEAN_RADIUS_METERS / 1000d);
     assertEquals(11, grid.getLevelForDistance(degrees));
   }
 
@@ -68,17 +69,17 @@ public class TestRecursivePrefixTreeStrategy extends StrategyTestCase {
   public void testPrecision() throws IOException{
     init(GeohashPrefixTree.getMaxLevelsPossible());
 
-    Point iPt = ctx.makePoint(2.8028712999999925, 48.3708044);//lon, lat
+    Point iPt = new Point(48.3708044, 2.8028712999999925);//lon, lat
     addDocument(newDoc("iPt", iPt));
     commit();
 
-    Point qPt = ctx.makePoint(2.4632387000000335, 48.6003516);
+    Point qPt = new Point(48.6003516, 2.4632387000000335);
 
-    final double KM2DEG = DistanceUtils.dist2Degrees(1, DistanceUtils.EARTH_MEAN_RADIUS_KM);
+    final double KM2DEG = GeoUtils.distanceToDegrees(1, GeoUtils.EARTH_MEAN_RADIUS_METERS / 1000d);
     final double DEG2KM = 1 / KM2DEG;
 
     final double DIST = 35.75;//35.7499...
-    assertEquals(DIST, ctx.getDistCalc().distance(iPt, qPt) * DEG2KM, 0.001);
+    assertEquals(DIST, SpatialContext.calculateDistance(iPt.lat(), iPt.lon(), qPt.lat(), qPt.lon()) * DEG2KM, 0.001);
 
     //distErrPct will affect the query shape precision. The indexed precision
     // was set to nearly zilch via init(GeohashPrefixTree.getMaxLevelsPossible());
@@ -99,8 +100,8 @@ public class TestRecursivePrefixTreeStrategy extends StrategyTestCase {
   }
 
   private SpatialArgs q(Point pt, double distDEG, double distErrPct) {
-    Shape shape = ctx.makeCircle(pt, distDEG);
-    SpatialArgs args = new SpatialArgs(SpatialOperation.Intersects,shape);
+    GeoShape shape = new Circle(pt.lat(), pt.lon(), distDEG);
+    SpatialArgs args = new SpatialArgs(SpatialOperation.INTERSECTS,shape);
     args.setDistErrPct(distErrPct);
     return args;
   }

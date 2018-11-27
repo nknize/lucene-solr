@@ -24,11 +24,13 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Locale;
 
-import org.locationtech.spatial4j.context.SpatialContext;
-import org.locationtech.spatial4j.shape.Point;
-import org.locationtech.spatial4j.shape.Rectangle;
-import org.locationtech.spatial4j.shape.Shape;
-import org.locationtech.spatial4j.shape.SpatialRelation;
+import org.apache.lucene.geo.GeoUtils;
+import org.apache.lucene.spatial.geometry.GeoShape;
+import org.apache.lucene.spatial.geometry.Geometry;
+import org.apache.lucene.spatial.geometry.Geometry.Relation;
+import org.apache.lucene.spatial.geometry.Point;
+import org.apache.lucene.spatial.geometry.Rectangle;
+import org.apache.lucene.spatial.SpatialContext;
 import org.apache.lucene.util.BytesRef;
 
 /**
@@ -79,10 +81,10 @@ public class QuadPrefixTree extends LegacyPrefixTree {
   public QuadPrefixTree(
       SpatialContext ctx, Rectangle bounds, int maxLevels) {
     super(ctx, maxLevels);
-    this.xmin = bounds.getMinX();
-    this.xmax = bounds.getMaxX();
-    this.ymin = bounds.getMinY();
-    this.ymax = bounds.getMaxY();
+    this.xmin = bounds.left();
+    this.xmax = bounds.right();
+    this.ymin = bounds.bottom();
+    this.ymax = bounds.top();
 
     levelW = new double[maxLevels];
     levelH = new double[maxLevels];
@@ -148,28 +150,21 @@ public class QuadPrefixTree extends LegacyPrefixTree {
   @Override
   public Cell getCell(Point p, int level) {
     List<Cell> cells = new ArrayList<>(1);
-    build(xmid, ymid, 0, cells, new BytesRef(maxLevels+1), ctx.makePoint(p.getX(),p.getY()), level);
+    build(xmid, ymid, 0, cells, new BytesRef(maxLevels+1), p.x(),p.y(), level);
     return cells.get(0);//note cells could be longer if p on edge
   }
 
-  private void build(
-      double x,
-      double y,
-      int level,
-      List<Cell> matches,
-      BytesRef str,
-      Shape shape,
-      int maxLevel) {
+  private void build(double x, double y, int level, List<Cell> matches, BytesRef str, double ptX, double ptY, int maxLevel) {
     assert str.length == level;
     double w = levelW[level] / 2;
     double h = levelH[level] / 2;
 
     // Z-Order
     // http://en.wikipedia.org/wiki/Z-order_%28curve%29
-    checkBattenberg('A', x - w, y + h, level, matches, str, shape, maxLevel);
-    checkBattenberg('B', x + w, y + h, level, matches, str, shape, maxLevel);
-    checkBattenberg('C', x - w, y - h, level, matches, str, shape, maxLevel);
-    checkBattenberg('D', x + w, y - h, level, matches, str, shape, maxLevel);
+    checkBattenberg('A', x - w, y + h, level, matches, str, ptX, ptY, maxLevel);
+    checkBattenberg('B', x + w, y + h, level, matches, str, ptX, ptY, maxLevel);
+    checkBattenberg('C', x - w, y - h, level, matches, str, ptX, ptY, maxLevel);
+    checkBattenberg('D', x + w, y - h, level, matches, str, ptX, ptY, maxLevel);
 
     // possibly consider hilbert curve
     // http://en.wikipedia.org/wiki/Hilbert_curve
@@ -177,28 +172,51 @@ public class QuadPrefixTree extends LegacyPrefixTree {
     // if we actually use the range property in the query, this could be useful
   }
 
-  protected void checkBattenberg(
-      char c,
-      double cx,
-      double cy,
-      int level,
-      List<Cell> matches,
-      BytesRef str,
-      Shape shape,
-      int maxLevel) {
+  public static Relation relate(final double minLat, final double maxLat, final double minLon, final double maxLon,
+                          final double x, final double y) {
+    if (y > maxLat || y < minLat) {
+      return Relation.DISJOINT;
+    }
+
+    // crosses dateline
+    if (minLon > maxLon) {
+      return relateXDL(minLon, maxLon, x);
+    }
+
+    if (x > maxLon) {
+      if (x != GeoUtils.MAX_LON_INCL || minLon != GeoUtils.MIN_LON_INCL) {
+        return Relation.DISJOINT;
+      }
+    }
+    if (x < minLon) {
+      if (x != GeoUtils.MIN_LON_INCL || maxLon != GeoUtils.MAX_LON_INCL) {
+        return Relation.DISJOINT;
+      }
+    }
+    return Relation.WITHIN;
+  }
+
+  private static Relation relateXDL(final double minLon, final double maxLon, final double lon) {
+    if (lon < minLon && lon > maxLon) {
+      return Relation.DISJOINT;
+    }
+    return Relation.WITHIN;
+  }
+
+  protected void checkBattenberg(char c, double cx, double cy, int level, List<Cell> matches, BytesRef str,
+                                 double ptX, double ptY, int maxLevel) {
     assert str.length == level;
     assert str.offset == 0;
     double w = levelW[level] / 2;
     double h = levelH[level] / 2;
 
     int strlen = str.length;
-    Rectangle rectangle = ctx.makeRectangle(cx - w, cx + w, cy - h, cy + h);
-    SpatialRelation v = shape.relate(rectangle);
-    if (SpatialRelation.CONTAINS == v) {
+    Relation v = relate(cy - h, cy + h, cx - w, cx + w, ptX, ptY);
+    if (Relation.CONTAINS == v) {  // RECTANGLES WILL NEVER BE WITHIN POINTS
       str.bytes[str.length++] = (byte)c;//append
       //str.append(SpatialPrefixGrid.COVER);
       matches.add(new QuadCell(BytesRef.deepCopyOf(str), v.transpose()));
-    } else if (SpatialRelation.DISJOINT == v) {
+    } else if (Relation.DISJOINT == v) {
       // nothing
     } else { // SpatialRelation.WITHIN, SpatialRelation.INTERSECTS
       str.bytes[str.length++] = (byte)c;//append
@@ -208,7 +226,7 @@ public class QuadPrefixTree extends LegacyPrefixTree {
         //str.append(SpatialPrefixGrid.INTERSECTS);
         matches.add(new QuadCell(BytesRef.deepCopyOf(str), v.transpose()));
       } else {
-        build(cx, cy, nextLevel, matches, str, shape, maxLevel);
+        build(cx, cy, nextLevel, matches, str, ptX, ptY, maxLevel);
       }
     }
     str.length = strlen;
@@ -220,7 +238,7 @@ public class QuadPrefixTree extends LegacyPrefixTree {
       super(bytes, off, len);
     }
 
-    QuadCell(BytesRef str, SpatialRelation shapeRel) {
+    QuadCell(BytesRef str, Relation shapeRel) {
       this(str.bytes, str.offset, str.length);
       this.shapeRel = shapeRel;
     }
@@ -263,10 +281,18 @@ public class QuadPrefixTree extends LegacyPrefixTree {
     }
 
     @Override
-    public Shape getShape() {
+    public Geometry getShape() {
       if (shape == null)
         shape = makeShape();
       return shape;
+    }
+
+    @Override
+    public Rectangle getRectangle() {
+      if (shape == null) {
+        shape = makeShape();
+      }
+      return (Rectangle) shape;
     }
 
     protected Rectangle makeShape() {
@@ -302,7 +328,12 @@ public class QuadPrefixTree extends LegacyPrefixTree {
         width = gridW;
         height = gridH;
       }
-      return ctx.makeRectangle(xmin, xmin + width, ymin, ymin + height);
+      return new Rectangle(ymin, ymin + height, xmin, xmin + width);
     }
   }//QuadCell
+
+  public static void main(String[] args) {
+    Relation r = relate(-90, 0, -180, 0, -85, 172);
+    System.out.println(r);
+  }
 }

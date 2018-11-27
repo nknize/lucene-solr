@@ -16,7 +16,7 @@
  */
 package org.apache.lucene.spatial.util;
 
-import org.locationtech.spatial4j.shape.Shape;
+import org.apache.lucene.spatial.geometry.Geometry;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -30,7 +30,7 @@ import java.util.List;
  *
  * @lucene.internal
  */
-public class ShapeFieldCache<T extends Shape> {
+public class ShapeFieldCache<T extends Geometry> {
   private final List<T>[] cache;
   public final int defaultLength;
 

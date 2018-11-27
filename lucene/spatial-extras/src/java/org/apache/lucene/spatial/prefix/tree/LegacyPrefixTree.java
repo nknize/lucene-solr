@@ -18,10 +18,12 @@ package org.apache.lucene.spatial.prefix.tree;
 
 import java.util.Arrays;
 
-import org.locationtech.spatial4j.context.SpatialContext;
-import org.locationtech.spatial4j.shape.Point;
-import org.locationtech.spatial4j.shape.Rectangle;
-import org.locationtech.spatial4j.shape.Shape;
+import org.apache.lucene.spatial.geometry.GeoShape;
+import org.apache.lucene.spatial.geometry.Geometry;
+import org.apache.lucene.spatial.geometry.Point;
+import org.apache.lucene.spatial.geometry.Rectangle;
+
+import org.apache.lucene.spatial.SpatialContext;
 import org.apache.lucene.util.BytesRef;
 
 /** The base for the original two SPT's: Geohash and Quad. Don't subclass this for new SPTs.
@@ -35,8 +37,9 @@ abstract class LegacyPrefixTree extends SpatialPrefixTree {
     if (level < 1 || level > getMaxLevels())
       throw new IllegalArgumentException("Level must be in 1 to maxLevels range");
     //TODO cache for each level
+
     Cell cell = getCell(ctx.getWorldBounds().getCenter(), level);
-    Rectangle bbox = cell.getShape().getBoundingBox();
+    Rectangle bbox = cell.getRectangle();
     double width = bbox.getWidth();
     double height = bbox.getHeight();
     //Use standard cartesian hypotenuse. For geospatial, this answer is larger
@@ -59,7 +62,7 @@ abstract class LegacyPrefixTree extends SpatialPrefixTree {
   }
 
   @Override
-  public CellIterator getTreeCellIterator(Shape shape, int detailLevel) {
+  public CellIterator getTreeCellIterator(Geometry shape, int detailLevel) {
     if (!(shape instanceof Point))
       return super.getTreeCellIterator(shape, detailLevel);
 

@@ -24,7 +24,7 @@ import java.util.GregorianCalendar;
 import java.util.Locale;
 import java.util.TimeZone;
 
-import org.locationtech.spatial4j.shape.Shape;
+import org.apache.lucene.spatial.geometry.Geometry;
 
 /**
  * A PrefixTree for date ranges in which the levels of the tree occur at natural periods of time (e.g. years,
@@ -262,7 +262,7 @@ public class DateRangePrefixTree extends NumberRangePrefixTree {
     assert field + 1 == Calendar.ERA || ((Calendar)cal.clone()).get(Calendar.ERA) == assertEra : "Calendar underflow";
   }
 
-  /** Converts {@code value} from a {@link Calendar} or {@link Date} to a {@link Shape}. Other arguments
+  /** Converts {@code value} from a {@link Calendar} or {@link Date} to a {@link Geometry}. Other arguments
    * result in a {@link java.lang.IllegalArgumentException}.
    * If a Calendar is passed in, there might be problems if it is not created via {@link #newCal()}.
    */

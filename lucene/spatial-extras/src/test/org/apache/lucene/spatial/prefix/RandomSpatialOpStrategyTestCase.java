@@ -22,7 +22,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 
-import org.locationtech.spatial4j.shape.Shape;
+import org.apache.lucene.geo.geometry.GeoShape;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.spatial.StrategyTestCase;
 import org.apache.lucene.spatial.query.SpatialArgs;
@@ -41,13 +41,13 @@ public abstract class RandomSpatialOpStrategyTestCase extends StrategyTestCase {
   protected void testOperationRandomShapes(final SpatialOperation operation) throws IOException {
 
     final int numIndexedShapes = randomIntBetween(1, 6);
-    List<Shape> indexedShapes = new ArrayList<>(numIndexedShapes);
+    List<GeoShape> indexedShapes = new ArrayList<>(numIndexedShapes);
     for (int i = 0; i < numIndexedShapes; i++) {
       indexedShapes.add(randomIndexedShape());
     }
 
     final int numQueryShapes = atLeast(20);
-    List<Shape> queryShapes = new ArrayList<>(numQueryShapes);
+    List<GeoShape> queryShapes = new ArrayList<>(numQueryShapes);
     for (int i = 0; i < numQueryShapes; i++) {
       queryShapes.add(randomQueryShape());
     }
@@ -56,7 +56,7 @@ public abstract class RandomSpatialOpStrategyTestCase extends StrategyTestCase {
   }
 
   protected void testOperation(final SpatialOperation operation,
-                               List<Shape> indexedShapes, List<Shape> queryShapes, boolean havoc) throws IOException {
+                               List<GeoShape> indexedShapes, List<GeoShape> queryShapes, boolean havoc) throws IOException {
     //first show that when there's no data, a query will result in no results
     {
       Query query = strategy.makeQuery(new SpatialArgs(operation, randomQueryShape()));
@@ -66,7 +66,7 @@ public abstract class RandomSpatialOpStrategyTestCase extends StrategyTestCase {
 
     //Main index loop:
     for (int i = 0; i < indexedShapes.size(); i++) {
-      Shape shape = indexedShapes.get(i);
+      GeoShape shape = indexedShapes.get(i);
       adoc(""+i, shape);
 
       if (havoc && random().nextInt(10) == 0)
@@ -86,7 +86,7 @@ public abstract class RandomSpatialOpStrategyTestCase extends StrategyTestCase {
 
     //Main query loop:
     for (int queryIdx = 0; queryIdx < queryShapes.size(); queryIdx++) {
-      final Shape queryShape = queryShapes.get(queryIdx);
+      final GeoShape queryShape = queryShapes.get(queryIdx);
 
       if (havoc)
         preQueryHavoc();
@@ -96,7 +96,7 @@ public abstract class RandomSpatialOpStrategyTestCase extends StrategyTestCase {
       //  then the search should find those same matches).
       Set<String> expectedIds = new LinkedHashSet<>();//true-positives
       for (int id = 0; id < indexedShapes.size(); id++) {
-        Shape indexedShape = indexedShapes.get(id);
+        GeoShape indexedShape = indexedShapes.get(id);
         if (indexedShape == null)
           continue;
         if (operation.evaluate(indexedShape, queryShape)) {
@@ -122,7 +122,7 @@ public abstract class RandomSpatialOpStrategyTestCase extends StrategyTestCase {
     }
   }
 
-  private void fail(String label, String id, List<Shape> indexedShapes, Shape queryShape, SpatialOperation operation) {
+  private void fail(String label, String id, List<GeoShape> indexedShapes, GeoShape queryShape, SpatialOperation operation) {
     fail("[" + operation + "] " + label
         + " I#" + id + ":" + indexedShapes.get(Integer.parseInt(id)) + " Q:" + queryShape);
   }
@@ -135,7 +135,7 @@ public abstract class RandomSpatialOpStrategyTestCase extends StrategyTestCase {
     }
   }
 
-  protected abstract Shape randomIndexedShape();
+  protected abstract GeoShape randomIndexedShape();
 
-  protected abstract Shape randomQueryShape();
+  protected abstract GeoShape randomQueryShape();
 }

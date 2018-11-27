@@ -23,6 +23,7 @@ import java.util.Map;
 import java.util.Random;
 import java.util.Set;
 
+import org.apache.lucene.spatial.serialized.LegacySerializedDVStrategy;
 import org.locationtech.spatial4j.context.SpatialContext;
 import org.locationtech.spatial4j.context.SpatialContextFactory;
 import org.locationtech.spatial4j.shape.Point;
@@ -36,7 +37,6 @@ import org.apache.lucene.spatial.prefix.RecursivePrefixTreeStrategy;
 import org.apache.lucene.spatial.prefix.tree.PackedQuadPrefixTree;
 import org.apache.lucene.spatial.prefix.tree.SpatialPrefixTree;
 import org.apache.lucene.spatial.prefix.tree.SpatialPrefixTreeFactory;
-import org.apache.lucene.spatial.serialized.SerializedDVStrategy;
 
 /**
  * Indexes spatial data according to a configured {@link SpatialStrategy} with optional
@@ -130,9 +130,9 @@ public class SpatialDocMaker extends DocMaker {
     return strategy;
   }
 
-  protected SerializedDVStrategy makeSerializedDVStrategy(String spatialField, Config config,
-                                                          Map<String, String> configMap, SpatialContext ctx) {
-    return new SerializedDVStrategy(ctx, spatialField);
+  protected LegacySerializedDVStrategy makeSerializedDVStrategy(String spatialField, Config config,
+                                                                Map<String, String> configMap, SpatialContext ctx) {
+    return new LegacySerializedDVStrategy(ctx, spatialField);
   }
 
   protected SpatialStrategy makeCompositeStrategy(Config config, Map<String, String> configMap, SpatialContext ctx) {

@@ -16,11 +16,14 @@
  */
 package org.apache.lucene.geo.geometry;
 
+import java.io.IOException;
 import java.text.ParseException;
 import java.util.Arrays;
 
 import org.apache.lucene.geo.parsers.SimpleGeoJSONPolygonParser;
+import org.apache.lucene.geo.parsers.WKBParser;
 import org.apache.lucene.index.PointValues;
+import org.apache.lucene.store.OutputStreamDataOutput;
 
 /**
  * Represents a closed polygon on the earth's surface.  You can either construct the Polygon directly yourself with {@code double[]}
@@ -80,6 +83,10 @@ public final class Polygon extends Line {
   @Override
   protected void checkLonArgs(final double[] lons) {
     super.checkLonArgs(lons);
+    if (lons.length < 4) {
+      // being pedantic; the order of operations preclude this check, but we should do it anyway
+      throw new IllegalArgumentException("at least 4 polygon points required");
+    }
   }
 
   /** Returns a copy of the internal latitude array */
@@ -108,7 +115,7 @@ public final class Polygon extends Line {
     return holes[i];
   }
 
-  /** Builds a EdgeTree from multipolygon */
+  /** Lazily builds an EdgeTree from multipolygon */
   public static EdgeTree createEdgeTree(Polygon... polygons) {
     EdgeTree components[] = new EdgeTree[polygons.length];
     for (int i = 0; i < components.length; i++) {
@@ -124,26 +131,28 @@ public final class Polygon extends Line {
   }
 
   @Override
-  public Relation relate(double minLat, double maxLat, double minLon, double maxLon) {
-    if (tree == null) {
-      tree = createEdgeTree(this);
-    }
-    return tree.relate(minLat, maxLat, minLon, maxLon);
+  public boolean hasArea() {
+    return true;
   }
 
-//  @Override
-//  public PointValues.Relation relate(GeoShape other) {
-//    switch (other.type()) {
-//      case POLYGON:
-//        return relatePolyPoly(getClass().cast(other));
-//    }
-//    // not yet implemented
-//    throw new UnsupportedOperationException("not yet able to relate other GeoShape types to linestrings");
-//  }
+  @Override
+  protected double computeArea() {
+    assertEdgeTree();
+    return this.tree.getArea();
+  }
 
-//  public PointValues.Relation relatePolyPoly(Polygon other) {
-//    tree.relate
-//  }
+  @Override
+  public Relation relate(double minLat, double maxLat, double minLon, double maxLon) {
+    assertEdgeTree();
+    Relation r = tree.relate(minLat, maxLat, minLon, maxLon);
+    return r.transpose();
+  }
+
+  protected void assertEdgeTree() {
+    if (this.tree == null) {
+      tree = createEdgeTree(this);
+    }
+  }
 
   @Override
   public int hashCode() {
@@ -171,11 +180,52 @@ public final class Polygon extends Line {
     return sb.toString();
   }
 
+  protected static StringBuilder polygonToWKT(final Polygon polygon) {
+    StringBuilder sb = new StringBuilder();
+    sb.append('(');
+    sb.append(MultiPoint.coordinatesToWKT(polygon.lats, polygon.lons));
+    Polygon[] holes = polygon.getHoles();
+    for (int i = 0; i < holes.length; ++i) {
+      sb.append(", ");
+      sb.append(MultiPoint.coordinatesToWKT(holes[i].lats, holes[i].lons));
+    }
+    sb.append(')');
+    return sb;
+  }
+
+  @Override
+  protected StringBuilder contentToWKT() {
+    return polygonToWKT(this);
+  }
+
   /** Parses a standard GeoJSON polygon string.  The type of the incoming GeoJSON object must be a Polygon or MultiPolygon, optionally
    *  embedded under a "type: Feature".  A Polygon will return as a length 1 array, while a MultiPolygon will be 1 or more in length.
    *
    *  <p>See <a href="http://geojson.org/geojson-spec.html">the GeoJSON specification</a>. */
   public static Polygon[] fromGeoJSON(String geojson) throws ParseException {
     return new SimpleGeoJSONPolygonParser(geojson).parse();
+  }
+
+  @Override
+  protected void appendWKBContent(OutputStreamDataOutput out) throws IOException {
+    polygonToWKB(this, out, false);
+  }
+
+  public static void polygonToWKB(final Polygon polygon, OutputStreamDataOutput out,
+                                  final boolean writeHeader) throws IOException {
+    if (writeHeader == true) {
+      out.writeVInt(WKBParser.ByteOrder.XDR.ordinal());
+      out.writeVInt(ShapeType.POLYGON.wkbOrdinal());
+    }
+    int numHoles = polygon.numHoles();
+    out.writeVInt(numHoles + 1);  // number rings
+    // write shell
+    Line.lineToWKB(polygon.lats, polygon.lons, out, false);
+    // write holes
+    Polygon hole;
+    for (int i = 0; i < numHoles; ++i) {
+      hole = polygon.getHole(i);
+      Line.lineToWKB(hole.lats, hole.lons, out, false);
+    }
   }
 }

@@ -24,9 +24,8 @@ import org.apache.lucene.search.DoubleValuesSource;
 import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.spatial.ShapeValues;
 import org.apache.lucene.spatial.ShapeValuesSource;
-import org.locationtech.spatial4j.context.SpatialContext;
-import org.locationtech.spatial4j.distance.DistanceCalculator;
-import org.locationtech.spatial4j.shape.Point;
+import org.apache.lucene.spatial.SpatialContext;
+import org.apache.lucene.spatial.geometry.Point;
 
 /**
  * The distance from a provided Point to a Point retrieved from an ShapeValuesSource. The distance
@@ -39,7 +38,6 @@ public class DistanceToShapeValueSource extends DoubleValuesSource {
   private final ShapeValuesSource shapeValueSource;
   private final Point queryPoint;
   private final double multiplier;
-  private final DistanceCalculator distCalc;
 
   //TODO if DoubleValues returns NaN; will things be ok?
   private final double nullValue;
@@ -49,7 +47,6 @@ public class DistanceToShapeValueSource extends DoubleValuesSource {
     this.shapeValueSource = shapeValueSource;
     this.queryPoint = queryPoint;
     this.multiplier = multiplier;
-    this.distCalc = ctx.getDistCalc();
     this.nullValue = (ctx.isGeo() ? 180 * multiplier : Double.MAX_VALUE);
   }
 
@@ -66,7 +63,8 @@ public class DistanceToShapeValueSource extends DoubleValuesSource {
     return DoubleValues.withDefault(new DoubleValues() {
       @Override
       public double doubleValue() throws IOException {
-        return distCalc.distance(queryPoint, shapeValues.value().getCenter()) * multiplier;
+        Point p = shapeValues.value().center();
+        return SpatialContext.calculateDistance(queryPoint.x(), queryPoint.y(), p.x(), p.y()) * multiplier;
       }
 
       @Override
@@ -101,7 +99,6 @@ public class DistanceToShapeValueSource extends DoubleValuesSource {
     if (!queryPoint.equals(that.queryPoint)) return false;
     if (Double.compare(that.multiplier, multiplier) != 0) return false;
     if (!shapeValueSource.equals(that.shapeValueSource)) return false;
-    if (!distCalc.equals(that.distCalc)) return false;
 
     return true;
   }

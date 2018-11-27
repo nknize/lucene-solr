@@ -32,10 +32,10 @@ import org.apache.lucene.search.Query;
 import org.apache.lucene.search.ScoreMode;
 import org.apache.lucene.search.Scorer;
 import org.apache.lucene.search.Weight;
+import org.apache.lucene.spatial.geometry.Geometry;
 import org.apache.lucene.spatial.prefix.tree.SpatialPrefixTree;
 import org.apache.lucene.util.BitSet;
 import org.apache.lucene.util.DocIdSetBuilder;
-import org.locationtech.spatial4j.shape.Shape;
 
 /**
  * Base class for Lucene Queries on SpatialPrefixTree fields.
@@ -43,12 +43,12 @@ import org.locationtech.spatial4j.shape.Shape;
  */
 public abstract class AbstractPrefixTreeQuery extends Query {
 
-  protected final Shape queryShape;
+  protected final Geometry queryShape;
   protected final String fieldName;
   protected final SpatialPrefixTree grid;//not in equals/hashCode since it's implied for a specific field
   protected final int detailLevel;
 
-  public AbstractPrefixTreeQuery(Shape queryShape, String fieldName, SpatialPrefixTree grid, int detailLevel) {
+  public AbstractPrefixTreeQuery(Geometry queryShape, String fieldName, SpatialPrefixTree grid, int detailLevel) {
     this.queryShape = queryShape;
     this.fieldName = fieldName;
     this.grid = grid;

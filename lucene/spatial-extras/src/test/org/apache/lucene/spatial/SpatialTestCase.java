@@ -24,6 +24,9 @@ import java.util.logging.Logger;
 import org.apache.lucene.analysis.Analyzer;
 import org.apache.lucene.analysis.MockAnalyzer;
 import org.apache.lucene.document.Document;
+import org.apache.lucene.geo.GeoUtils;
+import org.apache.lucene.geo.geometry.Point;
+import org.apache.lucene.geo.geometry.Rectangle;
 import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.index.RandomIndexWriter;
 import org.apache.lucene.search.IndexSearcher;
@@ -34,10 +37,6 @@ import org.apache.lucene.store.Directory;
 import org.apache.lucene.util.IOUtils;
 import org.apache.lucene.util.LuceneTestCase;
 import org.apache.lucene.util.LuceneTestCase.SuppressSysoutChecks;
-import org.locationtech.spatial4j.context.SpatialContext;
-import org.locationtech.spatial4j.distance.DistanceUtils;
-import org.locationtech.spatial4j.shape.Point;
-import org.locationtech.spatial4j.shape.Rectangle;
 
 import static com.carrotsearch.randomizedtesting.RandomizedTest.randomDouble;
 import static com.carrotsearch.randomizedtesting.RandomizedTest.randomGaussian;
@@ -121,9 +120,9 @@ public abstract class SpatialTestCase extends LuceneTestCase {
 
   protected Point randomPoint() {
     final Rectangle WB = ctx.getWorldBounds();
-    return ctx.makePoint(
-        randomIntBetween((int) WB.getMinX(), (int) WB.getMaxX()),
-        randomIntBetween((int) WB.getMinY(), (int) WB.getMaxY()));
+    return new Point(
+        randomIntBetween((int) WB.minLat(), (int) WB.maxLat()),
+        randomIntBetween((int) WB.minLon(), (int) WB.maxLon()));
   }
 
   protected Rectangle randomRectangle() {
@@ -131,19 +130,19 @@ public abstract class SpatialTestCase extends LuceneTestCase {
   }
 
   protected Rectangle randomRectangle(Rectangle bounds) {
-    double[] xNewStartAndWidth = randomSubRange(bounds.getMinX(), bounds.getWidth());
+    double[] xNewStartAndWidth = randomSubRange(bounds.minLon(), bounds.getWidth());
     double xMin = xNewStartAndWidth[0];
     double xMax = xMin + xNewStartAndWidth[1];
-    if (bounds.getCrossesDateLine()) {
-      xMin = DistanceUtils.normLonDEG(xMin);
-      xMax = DistanceUtils.normLonDEG(xMax);
+    if (bounds.crossesDateline()) {
+      xMin = GeoUtils.normalizeLonDegrees(xMin);
+      xMax = GeoUtils.normalizeLonDegrees(xMax);
     }
 
-    double[] yNewStartAndHeight = randomSubRange(bounds.getMinY(), bounds.getHeight());
+    double[] yNewStartAndHeight = randomSubRange(bounds.minLat(), bounds.getHeight());
     double yMin = yNewStartAndHeight[0];
     double yMax = yMin + yNewStartAndHeight[1];
 
-    return ctx.makeRectangle(xMin, xMax, yMin, yMax);
+    return new Rectangle(yMin, yMax, xMin, xMax);
   }
 
   /** Returns new minStart and new length that is inside the range specified by the arguments. */

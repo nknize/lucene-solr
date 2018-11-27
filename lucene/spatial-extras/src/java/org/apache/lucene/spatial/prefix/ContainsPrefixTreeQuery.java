@@ -19,8 +19,9 @@ package org.apache.lucene.spatial.prefix;
 import java.io.IOException;
 import java.util.Arrays;
 
-import org.locationtech.spatial4j.shape.Shape;
-import org.locationtech.spatial4j.shape.SpatialRelation;
+import org.apache.lucene.spatial.geometry.Geometry;
+import org.apache.lucene.spatial.geometry.Geometry.Relation;
+import org.apache.lucene.spatial.geometry.Rectangle;
 import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.index.PostingsEnum;
 import org.apache.lucene.index.TermsEnum;
@@ -35,7 +36,7 @@ import org.apache.lucene.util.RamUsageEstimator;
 import org.apache.lucene.util.SentinelIntSet;
 
 /**
- * Finds docs where its indexed shape {@link org.apache.lucene.spatial.query.SpatialOperation#Contains
+ * Finds docs where its indexed shape {@link org.apache.lucene.spatial.query.SpatialOperation#CONTAINS
  * CONTAINS} the query shape. For use on {@link RecursivePrefixTreeStrategy}.
  *
  * @lucene.experimental
@@ -51,7 +52,7 @@ public class ContainsPrefixTreeQuery extends AbstractPrefixTreeQuery {
    */
   protected final boolean multiOverlappingIndexedShapes;
 
-  public ContainsPrefixTreeQuery(Shape queryShape, String fieldName, SpatialPrefixTree grid, int detailLevel, boolean multiOverlappingIndexedShapes) {
+  public ContainsPrefixTreeQuery(Geometry queryShape, String fieldName, SpatialPrefixTree grid, int detailLevel, boolean multiOverlappingIndexedShapes) {
     super(queryShape, fieldName, grid, detailLevel);
     this.multiOverlappingIndexedShapes = multiOverlappingIndexedShapes;
   }
@@ -105,10 +106,11 @@ public class ContainsPrefixTreeQuery extends AbstractPrefixTreeQuery {
       // Get the AND of all child results (into combinedSubResults)
       SmallDocSet combinedSubResults = null;
       //   Optimization: use null subCellsFilter when we know cell is within the query shape.
-      Shape subCellsFilter = queryShape;
-      if (cell.getLevel() != 0 && ((cell.getShapeRel() == null || cell.getShapeRel() == SpatialRelation.WITHIN))) {
+      Geometry subCellsFilter = queryShape;
+      if (cell.getLevel() != 0 && ((cell.getShapeRel() == null || cell.getShapeRel() == Relation.WITHIN))) {
         subCellsFilter = null;
-        assert cell.getShape().relate(queryShape) == SpatialRelation.WITHIN;
+        Rectangle r = cell.getRectangle();
+        assert queryShape.relate(r.left(), r.right(), r.bottom(), r.top()) == Relation.CONTAINS;
       }
       CellIterator subCells = cell.getNextLevelCells(subCellsFilter);
       while (subCells.hasNext()) {
@@ -118,7 +120,7 @@ public class ContainsPrefixTreeQuery extends AbstractPrefixTreeQuery {
         } else if (subCell.getLevel() == detailLevel) {
           combinedSubResults = getDocs(subCell, acceptContains);
         } else if (!multiOverlappingIndexedShapes &&
-            subCell.getShapeRel() == SpatialRelation.WITHIN) {
+            subCell.getShapeRel() == Relation.WITHIN) {
           combinedSubResults = getLeafDocs(subCell, acceptContains);
         } else {
           //OR the leaf docs with all child results

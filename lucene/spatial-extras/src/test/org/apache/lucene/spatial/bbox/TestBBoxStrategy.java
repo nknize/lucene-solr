@@ -20,8 +20,12 @@ import java.io.IOException;
 
 import com.carrotsearch.randomizedtesting.annotations.Repeat;
 import org.apache.lucene.document.FieldType;
+import org.apache.lucene.geo.GeoUtils;
+import org.apache.lucene.geo.geometry.GeoShape;
+import org.apache.lucene.geo.geometry.Rectangle;
 import org.apache.lucene.index.DocValuesType;
 import org.apache.lucene.search.Query;
+import org.apache.lucene.spatial.SpatialContext;
 import org.apache.lucene.spatial.SpatialMatchConcern;
 import org.apache.lucene.spatial.prefix.RandomSpatialOpStrategyTestCase;
 import org.apache.lucene.spatial.query.SpatialArgs;
@@ -29,17 +33,11 @@ import org.apache.lucene.spatial.query.SpatialOperation;
 import org.apache.lucene.spatial.util.ShapeAreaValueSource;
 import org.junit.Ignore;
 import org.junit.Test;
-import org.locationtech.spatial4j.context.SpatialContext;
-import org.locationtech.spatial4j.context.SpatialContextFactory;
-import org.locationtech.spatial4j.distance.DistanceUtils;
-import org.locationtech.spatial4j.shape.Rectangle;
-import org.locationtech.spatial4j.shape.Shape;
-import org.locationtech.spatial4j.shape.impl.RectangleImpl;
 
 public class TestBBoxStrategy extends RandomSpatialOpStrategyTestCase {
 
   @Override
-  protected Shape randomIndexedShape() {
+  protected GeoShape randomIndexedShape() {
     Rectangle world = ctx.getWorldBounds();
     if (random().nextInt(10) == 0) // increased chance of getting one of these
       return world;
@@ -53,14 +51,14 @@ public class TestBBoxStrategy extends RandomSpatialOpStrategyTestCase {
     if (ctx.isGeo() && (deltaLeft != 0 || deltaRight != 0)) {
       //if geo & doesn't world-wrap, we shift randomly to potentially cross dateline
       int shift = nextIntInclusive(360);
-      return ctx.makeRectangle(
-          DistanceUtils.normLonDEG(world.getMinX() + deltaLeft + shift),
-          DistanceUtils.normLonDEG(world.getMaxX() - deltaRight + shift),
-          world.getMinY() + deltaBottom, world.getMaxY() - deltaTop);
+      return new Rectangle(
+          world.minLat() + deltaBottom, world.maxLat() - deltaTop,
+          GeoUtils.normalizeLonDegrees(world.minLon() + deltaLeft + shift),
+          GeoUtils.normalizeLonDegrees(world.maxLon() - deltaRight + shift));
     } else {
-      return ctx.makeRectangle(
-          world.getMinX() + deltaLeft, world.getMaxX() - deltaRight,
-          world.getMinY() + deltaBottom, world.getMaxY() - deltaTop);
+      return new Rectangle(
+          world.minLat() + deltaBottom, world.maxLat() - deltaTop,
+          world.minLon() + deltaLeft, world.maxLon() - deltaRight);
     }
   }
 
@@ -75,7 +73,7 @@ public class TestBBoxStrategy extends RandomSpatialOpStrategyTestCase {
   }
 
   @Override
-  protected Shape randomQueryShape() {
+  protected GeoShape randomQueryShape() {
     return randomIndexedShape();
   }
 
@@ -86,10 +84,7 @@ public class TestBBoxStrategy extends RandomSpatialOpStrategyTestCase {
     if (random().nextInt(4) > 0) {//75% of the time choose geo (more interesting to test)
       this.ctx = SpatialContext.GEO;
     } else {
-      SpatialContextFactory factory = new SpatialContextFactory();
-      factory.geo = false;
-      factory.worldBounds = new RectangleImpl(-300, 300, -100, 100, null);
-      this.ctx = factory.newSpatialContext();
+      this.ctx = new SpatialContext(false, new Rectangle(-100, 100, -300, 300));
     }
     this.strategy = BBoxStrategy.newInstance(ctx, "bbox");
     //test we can disable docValues for predicate tests
@@ -99,7 +94,7 @@ public class TestBBoxStrategy extends RandomSpatialOpStrategyTestCase {
       strategy = new BBoxStrategy(ctx, strategy.getFieldName(), fieldType);
     }
     for (SpatialOperation operation : SpatialOperation.values()) {
-      if (operation == SpatialOperation.Overlaps)
+      if (operation == SpatialOperation.OVERLAPS)
         continue;//unsupported
       testOperationRandomShapes(operation);
 
@@ -112,45 +107,45 @@ public class TestBBoxStrategy extends RandomSpatialOpStrategyTestCase {
   public void testIntersectsBugDatelineEdge() throws IOException {
     setupGeo();
     testOperation(
-        ctx.makeRectangle(160, 180, -10, 10),
-        SpatialOperation.Intersects,
-        ctx.makeRectangle(-180, -160, -10, 10), true);
+        new Rectangle(-10, 10, 160, 180),
+        SpatialOperation.INTERSECTS,
+        new Rectangle(-10, 10, -180, -160), true);
   }
 
   @Test
   public void testIntersectsWorldDatelineEdge() throws IOException {
     setupGeo();
     testOperation(
-        ctx.makeRectangle(-180, 180, -10, 10),
-        SpatialOperation.Intersects,
-        ctx.makeRectangle(180, 180, -10, 10), true);
+        new Rectangle(-10, 10, -180, 180),
+        SpatialOperation.INTERSECTS,
+        new Rectangle(-10, 10, 180, 180), true);
   }
 
   @Test
   public void testWithinBugDatelineEdge() throws IOException {
     setupGeo();
     testOperation(
-        ctx.makeRectangle(180, 180, -10, 10),
-        SpatialOperation.IsWithin,
-        ctx.makeRectangle(-180, -100, -10, 10), true);
+        new Rectangle(-10, 10, 180, 180),
+        SpatialOperation.WITHIN,
+        new Rectangle(-10, 10, -180, -100), true);
   }
 
   @Test
   public void testContainsBugDatelineEdge() throws IOException {
     setupGeo();
     testOperation(
-        ctx.makeRectangle(-180, -150, -10, 10),
-        SpatialOperation.Contains,
-        ctx.makeRectangle(180, 180, -10, 10), true);
+        new Rectangle(-10, 10, -180, -150),
+        SpatialOperation.CONTAINS,
+        new Rectangle(-10, 10, 180, 180), true);
   }
 
   @Test
   public void testWorldContainsXDL() throws IOException {
     setupGeo();
     testOperation(
-        ctx.makeRectangle(-180, 180, -10, 10),
-        SpatialOperation.Contains,
-        ctx.makeRectangle(170, -170, -10, 10), true);
+        new Rectangle(-10, 10, -180, 180),
+        SpatialOperation.CONTAINS,
+        new Rectangle(-10, 10, 170, -170), true);
   }
 
   /** See https://github.com/spatial4j/spatial4j/issues/85 */
@@ -163,9 +158,9 @@ public class TestBBoxStrategy extends RandomSpatialOpStrategyTestCase {
 
     //both on dateline but expressed using opposite signs
     setupGeo();
-    final Rectangle indexedShape = ctx.makeRectangle(180, 180, -10, 10);
-    final Rectangle queryShape = ctx.makeRectangle(-180, -180, -20, 20);
-    final SpatialOperation operation = SpatialOperation.IsWithin;
+    final Rectangle indexedShape = new Rectangle(-10, 10, 180, 180);
+    final Rectangle queryShape = new Rectangle(-20, 20, -180, -180);
+    final SpatialOperation operation = SpatialOperation.WITHIN;
     final boolean match = true;//yes it is within
 
     //the rest is super.testOperation without leading assert:
@@ -214,7 +209,7 @@ public class TestBBoxStrategy extends RandomSpatialOpStrategyTestCase {
 
   /* Convert DATA_WORLD_CITIES_POINTS to bbox */
   @Override
-  protected Shape convertShapeFromGetDocuments(Shape shape) {
+  protected GeoShape convertShapeFromGetDocuments(GeoShape shape) {
     return shape.getBoundingBox();
   }
 
@@ -236,7 +231,7 @@ public class TestBBoxStrategy extends RandomSpatialOpStrategyTestCase {
     setupNeedsDocValuesOnly();
 
     //Simply assert null shape results in 0
-    adoc("999", (Shape) null);
+    adoc("999", (GeoShape) null);
     commit();
     BBoxStrategy bboxStrategy = (BBoxStrategy) strategy;
     checkValueSource(bboxStrategy.makeOverlapRatioValueSource(randomRectangle(), 0.0), new float[]{0f}, 0f);
@@ -279,17 +274,17 @@ public class TestBBoxStrategy extends RandomSpatialOpStrategyTestCase {
   }
 
   private Rectangle shiftedRect(double minX, double maxX, double minY, double maxY, int xShift) {
-    return ctx.makeRectangle(
-        DistanceUtils.normLonDEG(minX + xShift),
-        DistanceUtils.normLonDEG(maxX + xShift),
-        minY, maxY);
+    return new Rectangle(
+        minY, maxY,
+        GeoUtils.normalizeLonDegrees(minX + xShift),
+        GeoUtils.normalizeLonDegrees(maxX + xShift));
   }
 
   public void testAreaValueSource() throws IOException {
     BBoxStrategy bboxStrategy = setupNeedsDocValuesOnly();
 
-    adoc("100", ctx.makeRectangle(0, 20, 40, 80));
-    adoc("999", (Shape) null);
+    adoc("100", new Rectangle(40, 80, 0, 20));
+    adoc("999", (GeoShape) null);
     commit();
     checkValueSource(new ShapeAreaValueSource(bboxStrategy.makeShapeValueSource(), ctx, false, 1.0),
         new float[]{800f, 0f}, 0f);

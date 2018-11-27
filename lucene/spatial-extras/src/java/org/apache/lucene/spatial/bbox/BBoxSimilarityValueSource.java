@@ -19,6 +19,7 @@ package org.apache.lucene.spatial.bbox;
 import java.io.IOException;
 import java.util.concurrent.atomic.AtomicReference;
 
+import org.apache.lucene.geo.geometry.Rectangle;
 import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.search.DoubleValues;
 import org.apache.lucene.search.DoubleValuesSource;
@@ -26,7 +27,6 @@ import org.apache.lucene.search.Explanation;
 import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.spatial.ShapeValues;
 import org.apache.lucene.spatial.ShapeValuesSource;
-import org.locationtech.spatial4j.shape.Rectangle;
 
 /**
  * A base class for calculating a spatial relevance rank per document from a provided

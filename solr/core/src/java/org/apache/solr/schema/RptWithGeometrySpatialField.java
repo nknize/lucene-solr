@@ -22,6 +22,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 import org.apache.lucene.analysis.Analyzer;
+import org.apache.lucene.geo.geometry.GeoShape;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.spatial.ShapeValues;
@@ -29,14 +30,12 @@ import org.apache.lucene.spatial.ShapeValuesSource;
 import org.apache.lucene.spatial.composite.CompositeSpatialStrategy;
 import org.apache.lucene.spatial.prefix.RecursivePrefixTreeStrategy;
 import org.apache.lucene.spatial.query.SpatialArgsParser;
-import org.apache.lucene.spatial.serialized.SerializedDVStrategy;
+import org.apache.lucene.spatial.serialized.LegacySerializedDVStrategy;
 import org.apache.solr.common.SolrException;
 import org.apache.solr.core.SolrCore;
 import org.apache.solr.request.SolrRequestInfo;
 import org.apache.solr.search.SolrCache;
 import org.locationtech.spatial4j.context.SpatialContext;
-import org.locationtech.spatial4j.shape.Shape;
-import org.locationtech.spatial4j.shape.jts.JtsGeometry;
 
 /** A Solr Spatial FieldType based on {@link CompositeSpatialStrategy}.
  * @lucene.experimental */
@@ -79,7 +78,7 @@ public class RptWithGeometrySpatialField extends AbstractSpatialFieldType<Compos
 
     RecursivePrefixTreeStrategy rptStrategy = rptFieldType.newSpatialStrategy(fieldName);
 
-    SerializedDVStrategy geomStrategy = new CachingSerializedDVStrategy(ctx, fieldName);
+    LegacySerializedDVStrategy geomStrategy = new CachingLegacySerializedDVStrategy(ctx, fieldName);
 
     return new CompositeSpatialStrategy(fieldName, rptStrategy, geomStrategy);
   }
@@ -96,8 +95,8 @@ public class RptWithGeometrySpatialField extends AbstractSpatialFieldType<Compos
 
   // Most of the complexity of this field type is below, which is all about caching the shapes in a SolrCache
 
-  private static class CachingSerializedDVStrategy extends SerializedDVStrategy {
-    public CachingSerializedDVStrategy(SpatialContext ctx, String fieldName) {
+  private static class CachingLegacySerializedDVStrategy extends LegacySerializedDVStrategy {
+    public CachingLegacySerializedDVStrategy(SpatialContext ctx, String fieldName) {
       super(ctx, fieldName);
     }
 
@@ -145,7 +144,7 @@ public class RptWithGeometrySpatialField extends AbstractSpatialFieldType<Compos
     public ShapeValues getValues(LeafReaderContext readerContext) throws IOException {
       final ShapeValues targetFuncValues = targetValueSource.getValues(readerContext);
       // The key is a pair of leaf reader with a docId relative to that reader. The value is a Map from field to Shape.
-      final SolrCache<PerSegCacheKey,Shape> cache =
+      final SolrCache<PerSegCacheKey,GeoShape> cache =
           SolrRequestInfo.getRequestInfo().getReq().getSearcher().getCache(CACHE_KEY_PREFIX + fieldName);
       if (cache == null) {
         return targetFuncValues; // no caching; no configured cache
@@ -155,25 +154,25 @@ public class RptWithGeometrySpatialField extends AbstractSpatialFieldType<Compos
         int docId = -1;
 
         @Override
-        public Shape value() throws IOException {
+        public GeoShape value() throws IOException {
           //lookup in cache
           IndexReader.CacheHelper cacheHelper = readerContext.reader().getCoreCacheHelper();
           if (cacheHelper == null) {
             throw new IllegalStateException("Leaf " + readerContext.reader() + " is not suited for caching");
           }
           PerSegCacheKey key = new PerSegCacheKey(cacheHelper.getKey(), docId);
-          Shape shape = cache.get(key);
+          GeoShape shape = cache.get(key);
           if (shape == null) {
             shape = targetFuncValues.value();
             if (shape != null) {
               cache.put(key, shape);
             }
-          } else {
+          } /*else {
             //optimize shape on a cache hit if possible. This must be thread-safe and it is.
             if (shape instanceof JtsGeometry) {
               ((JtsGeometry) shape).index(); // TODO would be nice if some day we didn't have to cast
             }
-          }
+          }*/
           return shape;
         }
 

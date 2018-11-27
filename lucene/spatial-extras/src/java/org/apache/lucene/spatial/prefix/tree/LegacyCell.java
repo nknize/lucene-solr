@@ -18,16 +18,16 @@ package org.apache.lucene.spatial.prefix.tree;
 
 import java.util.Collection;
 
-import org.locationtech.spatial4j.shape.Point;
-import org.locationtech.spatial4j.shape.Shape;
-import org.locationtech.spatial4j.shape.SpatialRelation;
+import org.apache.lucene.spatial.geometry.Geometry;
+import org.apache.lucene.spatial.geometry.Geometry.Relation;
+import org.apache.lucene.spatial.geometry.Point;
 import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.StringHelper;
 
 /** The base for the original two SPT's: Geohash and Quad. Don't subclass this for new SPTs.
  * @lucene.internal */
 //public for RPT pruneLeafyBranches code
-public abstract class LegacyCell implements CellCanPrune {
+public abstract class LegacyCell implements Cell {
 
   // Important: A LegacyCell doesn't share state for getNextLevelCells(), and
   //  LegacySpatialPrefixTree assumes this in its simplify tree logic.
@@ -45,9 +45,9 @@ public abstract class LegacyCell implements CellCanPrune {
    * When set via getSubCells(filter), it is the relationship between this cell
    * and the given shape filter. Doesn't participate in shape equality.
    */
-  protected SpatialRelation shapeRel;
+  protected Relation shapeRel;
 
-  protected Shape shape;//cached
+  protected Geometry shape;//cached
 
   /** Warning: Refers to the same bytes (no copy). If {@link #setLeaf()} is subsequently called then it
    * may modify bytes. */
@@ -80,12 +80,12 @@ public abstract class LegacyCell implements CellCanPrune {
   protected abstract int getMaxLevels();
 
   @Override
-  public SpatialRelation getShapeRel() {
+  public Relation getShapeRel() {
     return shapeRel;
   }
 
   @Override
-  public void setShapeRel(SpatialRelation rel) {
+  public void setShapeRel(Relation rel) {
     this.shapeRel = rel;
   }
 
@@ -98,6 +98,9 @@ public abstract class LegacyCell implements CellCanPrune {
   public void setLeaf() {
     isLeaf = true;
   }
+
+  @Override
+  public boolean cellCanPrune() { return true; }
 
   @Override
   public BytesRef getTokenBytesWithLeaf(BytesRef result) {
@@ -131,11 +134,11 @@ public abstract class LegacyCell implements CellCanPrune {
   }
 
   @Override
-  public CellIterator getNextLevelCells(Shape shapeFilter) {
+  public CellIterator getNextLevelCells(Geometry shapeFilter) {
     assert getLevel() < getGrid().getMaxLevels();
     if (shapeFilter instanceof Point) {
       LegacyCell cell = getSubCell((Point) shapeFilter);
-      cell.shapeRel = SpatialRelation.CONTAINS;
+      cell.shapeRel = Relation.CONTAINS;
       return new SingletonCellIterator(cell);
     } else {
       return new FilterCellIterator(getSubCells().iterator(), shapeFilter);
@@ -158,6 +161,11 @@ public abstract class LegacyCell implements CellCanPrune {
    * @return A set of cells (no dups), sorted, modifiable, not empty, not null.
    */
   protected abstract Collection<Cell> getSubCells();
+
+  /**
+   * {@link #getSubCells()}.size() -- usually a constant. Should be &gt;=2
+   */
+  public abstract int getSubCellsSize();
 
   @Override
   public boolean isPrefixOf(Cell c) {

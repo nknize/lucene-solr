@@ -18,7 +18,7 @@ package org.apache.lucene.spatial.prefix.tree;
 
 import java.util.Map;
 
-import org.locationtech.spatial4j.context.SpatialContext;
+import org.apache.lucene.spatial.SpatialContext;
 import org.locationtech.spatial4j.distance.DistanceUtils;
 
 /**

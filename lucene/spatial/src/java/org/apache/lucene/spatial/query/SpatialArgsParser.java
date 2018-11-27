@@ -16,21 +16,22 @@
  */
 package org.apache.lucene.spatial.query;
 
-import org.locationtech.spatial4j.context.SpatialContext;
-import org.locationtech.spatial4j.exception.InvalidShapeException;
-import org.locationtech.spatial4j.shape.Shape;
-
+import java.io.IOException;
 import java.text.ParseException;
 import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
 import java.util.StringTokenizer;
 
+import org.apache.lucene.spatial.SpatialContext;
+import org.apache.lucene.spatial.geometry.Geometry;
+import org.apache.lucene.spatial.geometry.parsers.WKTParser;
+
 /**
  * Parses a string that usually looks like "OPERATION(SHAPE)" into a {@link SpatialArgs}
  * object. The set of operations supported are defined in {@link SpatialOperation}, such
- * as "Intersects" being a common one. The shape portion is defined by WKT {@link org.locationtech.spatial4j.io.WktShapeParser},
- * but it can be overridden/customized via {@link #parseShape(String, org.locationtech.spatial4j.context.SpatialContext)}.
+ * as "Intersects" being a common one. The shape portion is defined by WKT {@link org.apache.lucene.geo.parsers.WKTParser},
+ * but it can be overridden/customized via {@link #parseShape(String, SpatialContext)}.
  * There are some optional name-value pair parameters that follow the closing parenthesis.  Example:
  * <pre>
  *   Intersects(ENVELOPE(-10,-8,22,20)) distErrPct=0.025
@@ -65,13 +66,11 @@ public class SpatialArgsParser {
    * Parses a string such as "Intersects(ENVELOPE(-10,-8,22,20)) distErrPct=0.025".
    *
    * @param v   The string to parse. Mandatory.
-   * @param ctx The spatial context. Mandatory.
    * @return Not null.
    * @throws IllegalArgumentException if the parameters don't make sense or an add-on parameter is unknown
    * @throws ParseException If there is a problem parsing the string
-   * @throws InvalidShapeException When the coordinates are invalid for the shape
    */
-  public SpatialArgs parse(String v, SpatialContext ctx) throws ParseException, InvalidShapeException {
+  public SpatialArgs parse(String v, SpatialContext ctx) throws IOException, ParseException/*, InvalidShapeException*/ {
     int idx = v.indexOf('(');
     int edx = v.lastIndexOf(')');
 
@@ -79,14 +78,14 @@ public class SpatialArgsParser {
       throw new ParseException("missing parens: " + v, -1);
     }
 
-    SpatialOperation op = SpatialOperation.get(v.substring(0, idx).trim());
+    SpatialOperation op = SpatialOperation.forName(v.substring(0, idx).trim());
 
     String body = v.substring(idx + 1, edx).trim();
     if (body.length() < 1) {
       throw new ParseException("missing body : " + v, idx + 1);
     }
 
-    Shape shape = parseShape(body, ctx);
+    Geometry shape = parseShape(body, ctx);
     SpatialArgs args = newSpatialArgs(op, shape);
 
     if (v.length() > (edx + 1)) {
@@ -103,7 +102,7 @@ public class SpatialArgsParser {
     return args;
   }
 
-  protected SpatialArgs newSpatialArgs(SpatialOperation op, Shape shape) {
+  protected SpatialArgs newSpatialArgs(SpatialOperation op, Geometry shape) {
     return new SpatialArgs(op, shape);
   }
 
@@ -112,9 +111,9 @@ public class SpatialArgsParser {
     args.setDistErr(readDouble(nameValPairs.remove(DIST_ERR)));
   }
 
-  protected Shape parseShape(String str, SpatialContext ctx) throws ParseException {
+  protected Geometry parseShape(String str, SpatialContext ctx) throws IOException, ParseException {
     //return ctx.readShape(str);//still in Spatial4j 0.4 but will be deleted
-    return ctx.readShapeFromWkt(str);
+    return WKTParser.parse(str);
   }
 
   protected static Double readDouble(String v) {

@@ -37,11 +37,24 @@ public class GeoTestUtil {
     return nextDoubleInternal(-90, 90);
   }
 
+  /** returns next pseudorandom latitude within given range */
+  public static double nextLatitudeIn(final double low, final double high) {
+    GeoUtils.checkLatitude(low);
+    GeoUtils.checkLatitude(high);
+    return nextDoubleInternal(low, high);
+  }
+
   /** returns next pseudorandom longitude (anywhere) */
   public static double nextLongitude() {
     return nextDoubleInternal(-180, 180);
   }
-  
+
+  public static double nextLongitudeIn(final double low, final double high) {
+    GeoUtils.checkLongitude(low);
+    GeoUtils.checkLongitude(high);
+    return nextDoubleInternal(low, high);
+  }
+
   /**
    * Returns next double within range.
    * <p>

@@ -55,6 +55,9 @@ public final class GeoUtils {
   /** mean earth axis in meters */
   // see http://earth-info.nga.mil/GandG/publications/tr8350.2/wgs84fin.pdf
   public static final double EARTH_MEAN_RADIUS_METERS = 6_371_008.7714;
+  /** conversion factor for degree to kilometers */
+  public static final double DEG_TO_METERS = 111195.07973436875D;
+
 
   // No instance:
   private GeoUtils() {
@@ -172,6 +175,49 @@ public final class GeoUtils {
       lon += 360;
     }
     return maxLon - lon < 90 && lon - minLon < 90;
+  }
+
+  /** computes longitude in range -180 &lt;= lon_deg &lt;= +180. */
+  public static double normalizeLonDegrees(double lonDegrees) {
+    if (lonDegrees >= -180 && lonDegrees <= 180)
+      return lonDegrees;//common case, and avoids slight double precision shifting
+    double off = (lonDegrees + 180) % 360;
+    if (off < 0)
+      return 180 + off;
+    else if (off == 0 && lonDegrees > 0)
+      return 180;
+    else
+      return -180 + off;
+  }
+
+  public static double distanceToDegrees(double dist, double radius) {
+    return StrictMath.toDegrees(distanceToRadians(dist, radius));
+  }
+
+  public static double degreesToDistance(double degrees, double radius) {
+    return radiansToDistance(StrictMath.toRadians(degrees), radius);
+  }
+
+  public static double distanceToRadians(double dist, double radius) {
+    return dist / radius;
+  }
+
+  public static double radiansToDistance(double radians, double radius) {
+    return radians * radius;
+  }
+
+  public static double computeOrientation(final double[] xVals, final double[] yVals) {
+    if (xVals == null || yVals == null || xVals.length < 3 || xVals.length != yVals.length) {
+      throw new IllegalArgumentException("xVals and yVals must be the same length and include three or more values");
+    }
+    double windingSum = 0d;
+    final int numPts = yVals.length - 1;
+    for (int i = 1, j = 0;i < numPts; j = i++) {
+      // compute signed area for orientation
+      windingSum += (xVals[j] - xVals[numPts])*(yVals[i] - yVals[numPts])
+          - (yVals[j] - yVals[numPts])*(xVals[i] - xVals[numPts]);
+    }
+    return windingSum;
   }
 
 }

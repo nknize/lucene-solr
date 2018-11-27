@@ -16,11 +16,12 @@
  */
 package org.apache.lucene.spatial.query;
 
-import org.locationtech.spatial4j.context.SpatialContext;
-import org.locationtech.spatial4j.shape.Rectangle;
+import org.apache.lucene.geo.geometry.Rectangle;
+import org.apache.lucene.spatial.SpatialContext;
 import org.apache.lucene.util.LuceneTestCase;
 import org.junit.Test;
 
+import java.io.IOException;
 import java.text.ParseException;
 
 //Tests SpatialOperation somewhat too
@@ -35,21 +36,21 @@ public class SpatialArgsParserTest extends LuceneTestCase {
   public void testArgsParser() throws Exception {
     SpatialArgsParser parser = new SpatialArgsParser();
 
-    String arg = SpatialOperation.IsWithin + "(Envelope(-10, 10, 20, -20))";
+    String arg = SpatialOperation.WITHIN + "(Envelope(-10, 10, 20, -20))";
     SpatialArgs out = parser.parse(arg, ctx);
-    assertEquals(SpatialOperation.IsWithin, out.getOperation());
+    assertEquals(SpatialOperation.WITHIN, out.getOperation());
     Rectangle bounds = (Rectangle) out.getShape();
-    assertEquals(-10.0, bounds.getMinX(), 0D);
-    assertEquals(10.0, bounds.getMaxX(), 0D);
+    assertEquals(-10.0, bounds.minLon(), 0D);
+    assertEquals(10.0, bounds.maxLon(), 0D);
 
     // Disjoint should not be scored
-    arg = SpatialOperation.IsDisjointTo + " (Envelope(-10,-20,20,10))";
+    arg = SpatialOperation.DISJOINT + " (Envelope(-10,-20,20,10))";
     out = parser.parse(arg, ctx);
-    assertEquals(SpatialOperation.IsDisjointTo, out.getOperation());
+    assertEquals(SpatialOperation.DISJOINT, out.getOperation());
 
     // spatial operations need args
     expectThrows(Exception.class, () -> {
-      parser.parse(SpatialOperation.IsDisjointTo + "[ ]", ctx);
+      parser.parse(SpatialOperation.DISJOINT + "[ ]", ctx);
     });
 
     // unknown operation
@@ -57,16 +58,16 @@ public class SpatialArgsParserTest extends LuceneTestCase {
       parser.parse("XXXX(Envelope(-10, 10, 20, -20))", ctx);
     });
 
-    assertAlias(SpatialOperation.IsWithin, "CoveredBy");
-    assertAlias(SpatialOperation.IsWithin, "COVEREDBY");
-    assertAlias(SpatialOperation.IsWithin, "coveredBy");
-    assertAlias(SpatialOperation.IsWithin, "Within");
-    assertAlias(SpatialOperation.IsEqualTo, "Equals");
-    assertAlias(SpatialOperation.IsDisjointTo, "disjoint");
-    assertAlias(SpatialOperation.Contains, "Covers");
+    assertAlias(SpatialOperation.WITHIN, "CoveredBy");
+    assertAlias(SpatialOperation.WITHIN, "COVEREDBY");
+    assertAlias(SpatialOperation.WITHIN, "coveredBy");
+    assertAlias(SpatialOperation.WITHIN, "Within");
+    assertAlias(SpatialOperation.EQUALS, "Equals");
+    assertAlias(SpatialOperation.DISJOINT, "disjoint");
+    assertAlias(SpatialOperation.CONTAINS, "Covers");
   }
 
-  private void assertAlias(SpatialOperation op, final String name) throws ParseException {
+  private void assertAlias(SpatialOperation op, final String name) throws IOException, ParseException {
     String arg;
     SpatialArgs out;
     arg = name + "(Point(0 0))";

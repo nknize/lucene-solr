@@ -16,9 +16,6 @@
  */
 package org.apache.lucene.spatial;
 
-import org.locationtech.spatial4j.context.SpatialContext;
-import org.locationtech.spatial4j.shape.Shape;
-
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
@@ -29,13 +26,16 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 
+import org.apache.lucene.spatial.geometry.Geometry;
+import org.apache.lucene.spatial.geometry.parsers.WKTParser;
+
 // This class is modelled after SpatialTestQuery.
 // Before Lucene 4.7, this was a bit different in Spatial4j as SampleData & SampleDataReader.
 
 public class SpatialTestData {
   public String id;
   public String name;
-  public Shape shape;
+  public Geometry shape;
 
   /** Reads the stream, consuming a format that is a tab-separated values of 3 columns:
    * an "id", a "name" and the "shape".  Empty lines and lines starting with a '#' are skipped.
@@ -57,7 +57,7 @@ public class SpatialTestData {
         data.id = vals[0];
         data.name = vals[1];
         try {
-          data.shape = ctx.readShapeFromWkt(vals[2]);
+          data.shape = WKTParser.parse(vals[2]);
         } catch (ParseException e) {
           throw new RuntimeException(e);
         }

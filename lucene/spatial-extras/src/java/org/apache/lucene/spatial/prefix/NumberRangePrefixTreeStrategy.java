@@ -24,11 +24,11 @@ import java.util.TreeMap;
 
 import org.apache.lucene.index.IndexReaderContext;
 import org.apache.lucene.search.DoubleValuesSource;
+import org.apache.lucene.spatial.geometry.Geometry;
+import org.apache.lucene.spatial.geometry.Point;
 import org.apache.lucene.spatial.prefix.tree.Cell;
 import org.apache.lucene.spatial.prefix.tree.NumberRangePrefixTree;
 import org.apache.lucene.util.Bits;
-import org.locationtech.spatial4j.shape.Point;
-import org.locationtech.spatial4j.shape.Shape;
 
 import static org.apache.lucene.spatial.prefix.tree.NumberRangePrefixTree.UnitNRShape;
 
@@ -56,7 +56,7 @@ public class NumberRangePrefixTreeStrategy extends RecursivePrefixTreeStrategy {
   }
 
   @Override
-  protected boolean isPointShape(Shape shape) {
+  protected boolean isPointShape(Geometry shape) {
     if (shape instanceof NumberRangePrefixTree.UnitNRShape) {
       return ((NumberRangePrefixTree.UnitNRShape)shape).getLevel() == grid.getMaxLevels();
     } else {
@@ -65,7 +65,7 @@ public class NumberRangePrefixTreeStrategy extends RecursivePrefixTreeStrategy {
   }
 
   @Override
-  protected boolean isGridAlignedShape(Shape shape) {
+  protected boolean isGridAlignedShape(Geometry shape) {
     // any UnitNRShape other than the world is a single cell/term
     if (shape instanceof NumberRangePrefixTree.UnitNRShape) {
       return ((NumberRangePrefixTree.UnitNRShape)shape).getLevel() > 0;
@@ -83,11 +83,11 @@ public class NumberRangePrefixTreeStrategy extends RecursivePrefixTreeStrategy {
   /** Calculates facets between {@code start} and {@code end} to a detail level one greater than that provided by the
    * arguments. For example providing March to October of 2014 would return facets to the day level of those months.
    * This is just a convenience method.
-   * @see #calcFacets(IndexReaderContext, Bits, Shape, int)
+   * @see #calcFacets(IndexReaderContext, Bits, Geometry, int)
    */
   public Facets calcFacets(IndexReaderContext context, Bits topAcceptDocs, UnitNRShape start, UnitNRShape end)
       throws IOException {
-    Shape facetRange = getGrid().toRangeShape(start, end);
+    Geometry facetRange = getGrid().toRangeShape(start, end);
     int detailLevel = Math.max(start.getLevel(), end.getLevel()) + 1;
     return calcFacets(context, topAcceptDocs, facetRange, detailLevel);
   }
@@ -99,7 +99,7 @@ public class NumberRangePrefixTreeStrategy extends RecursivePrefixTreeStrategy {
    * {@link org.apache.lucene.spatial.prefix.tree.NumberRangePrefixTree.UnitNRShape#getLevel()}.
    * Facet computation is implemented by navigating the underlying indexed terms efficiently.
    */
-  public Facets calcFacets(IndexReaderContext context, Bits topAcceptDocs, Shape facetRange, final int level)
+  public Facets calcFacets(IndexReaderContext context, Bits topAcceptDocs, Geometry facetRange, final int level)
       throws IOException {
     final Facets facets = new Facets(level);
     PrefixTreeFacetCounter.compute(this, context, topAcceptDocs, facetRange, level,
