@@ -188,13 +188,7 @@ public final class Polygon {
   @Override
   public String toString() {
     StringBuilder sb = new StringBuilder();
-    for (int i = 0; i < polyLats.length; i++) {
-      sb.append("[")
-      .append(polyLats[i])
-      .append(", ")
-      .append(polyLons[i])
-      .append("] ");
-    }
+    sb.append(verticesToGeoJSON(polyLats, polyLons));
     if (holes.length > 0) {
       sb.append(", holes=");
       sb.append(Arrays.toString(holes));

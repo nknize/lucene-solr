@@ -20,6 +20,7 @@ import com.carrotsearch.randomizedtesting.generators.RandomNumbers;
 import org.apache.lucene.document.LatLonShape.QueryRelation;
 import org.apache.lucene.geo.EdgeTree;
 import org.apache.lucene.geo.GeoTestUtil;
+import org.apache.lucene.geo.GeoUtils;
 import org.apache.lucene.geo.Line;
 import org.apache.lucene.geo.Line2D;
 import org.apache.lucene.geo.Polygon2D;
@@ -73,6 +74,32 @@ public class TestLatLonPointShapeQueries extends BaseLatLonShapeTestCase {
   }
 
   protected class PointValidator extends Validator {
+    @Override
+    public boolean testPointQuery(double[][] points, Object shape) {
+      Point point = (Point) shape;
+      double x, y;
+      double qLat = quantizeLat(point.lat);
+      double qLon = quantizeLon(point.lon);
+      for (int p = 0; p < points.length; ++p) {
+        x = quantizeLon(points[p][1]);
+        y = quantizeLat(points[p][0]);
+        if (pointEquals(x, y, qLon, qLat)) {
+          return queryRelation != QueryRelation.DISJOINT;
+        }
+      }
+      return queryRelation == QueryRelation.DISJOINT;
+    }
+
+    private boolean pointEquals(double aX, double aY, double bX, double bY) {
+      if (aY != bY) {
+        return false;
+      }
+      if (aX == GeoUtils.MIN_LON_INCL || aX == GeoUtils.MAX_LON_INCL) {
+        return Math.abs(aX) == Math.abs(bX);
+      }
+      return aX == bX;
+    }
+
     @Override
     public boolean testBBoxQuery(double minLat, double maxLat, double minLon, double maxLon, Object shape) {
       Point p = (Point)shape;

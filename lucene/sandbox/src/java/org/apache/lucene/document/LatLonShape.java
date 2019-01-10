@@ -94,6 +94,12 @@ public class LatLonShape {
     return new Field[] {new LatLonTriangle(fieldName, lat, lon, lat, lon, lat, lon)};
   }
 
+  /** create a query to find all polygons that intersect the provided point(s)
+   **/
+  public static Query newPointQuery(String field, QueryRelation queryRelation, double[][] points) {
+    return new LatLonShapePointQuery(field, queryRelation, points);
+  }
+
   /** create a query to find all polygons that intersect a defined bounding box
    **/
   public static Query newBoxQuery(String field, QueryRelation queryRelation, double minLatitude, double maxLatitude, double minLongitude, double maxLongitude) {

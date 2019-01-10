@@ -20,7 +20,9 @@ package org.apache.lucene.document;
 import com.carrotsearch.randomizedtesting.generators.RandomNumbers;
 import org.apache.lucene.document.LatLonShape.QueryRelation;
 import org.apache.lucene.geo.EdgeTree;
+import org.apache.lucene.geo.GeoEncodingUtils;
 import org.apache.lucene.geo.GeoTestUtil;
+import org.apache.lucene.geo.GeoUtils;
 import org.apache.lucene.geo.Line;
 import org.apache.lucene.geo.Line2D;
 import org.apache.lucene.geo.Polygon2D;
@@ -76,6 +78,29 @@ public class TestLatLonLineShapeQueries extends BaseLatLonShapeTestCase {
   }
 
   protected class LineValidator extends Validator {
+    @Override
+    public boolean testPointQuery(double[][] points, Object shape) {
+      Line line = (Line) shape;
+      int ax, ay, bx, by;
+      int x, y;
+      for (int i = 0, j = 1; j < line.numPoints(); ++i, ++j) {
+        ax = GeoEncodingUtils.encodeLongitude(line.getLon(i));
+        ay = GeoEncodingUtils.encodeLatitude(line.getLat(i));
+        bx = GeoEncodingUtils.encodeLongitude(line.getLon(j));
+        by = GeoEncodingUtils.encodeLatitude(line.getLat(j));
+        for (int p = 0; p < points.length; ++p) {
+          x = GeoEncodingUtils.encodeLongitude(points[p][1]);
+          y = GeoEncodingUtils.encodeLatitude(points[p][0]);
+          if (GeoUtils.orient(ax, ay, bx, by, x, y) == 0) {
+            if (x <= Math.max(ax, bx) && x >= Math.min(ax, bx)
+                && y <= Math.max(ay, by) && y >= Math.min(ay, by))
+            return queryRelation != QueryRelation.DISJOINT;
+          }
+        }
+      }
+      return queryRelation == QueryRelation.DISJOINT;
+    }
+
     @Override
     public boolean testBBoxQuery(double minLat, double maxLat, double minLon, double maxLon, Object shape) {
       Line line = (Line)shape;

@@ -21,9 +21,11 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
 
+import com.carrotsearch.randomizedtesting.generators.RandomNumbers;
 import com.carrotsearch.randomizedtesting.generators.RandomPicks;
 import org.apache.lucene.document.LatLonShape.QueryRelation;
 import org.apache.lucene.geo.GeoTestUtil;
+import org.apache.lucene.geo.GeoUtils;
 import org.apache.lucene.geo.Line;
 import org.apache.lucene.geo.Line2D;
 import org.apache.lucene.geo.Polygon;
@@ -109,6 +111,30 @@ public abstract class BaseLatLonShapeTestCase extends LuceneTestCase {
     return decoded;
   }
 
+  protected double[][] randomQueryPoints() {
+    int numPoints = RandomNumbers.randomIntBetween(random(), 10, 100);
+    double[][] points = new double[numPoints][2];
+    for (int i = 0; i < numPoints; ++i) {
+      points[i][0] = GeoTestUtil.nextLatitude();
+      points[i][1] = GeoTestUtil.nextLongitude();
+    }
+    return points;
+  }
+
+  private static String pointsToGeoJSON(double[][] points) {
+    StringBuilder sb = new StringBuilder();
+    sb.append('[');
+    sb.append(points[0][1] + ", " + points[0][0] + "]");
+    for (int i = 1; i < points.length; ++i) {
+      sb.append(", [");
+      sb.append(points[i][1]);
+      sb.append(", ");
+      sb.append(points[i][0]);
+      sb.append(']');
+    }
+    return sb.toString();
+  }
+
   /** use {@link GeoTestUtil#nextPolygon()} to create a random line; TODO: move to GeoTestUtil */
   public Line nextLine() {
     Polygon poly = GeoTestUtil.nextPolygon();
@@ -138,6 +164,11 @@ public abstract class BaseLatLonShapeTestCase extends LuceneTestCase {
     for (Field f : fields) {
       doc.add(f);
     }
+  }
+
+  /** factory method to create a new point query */
+  protected Query newPointQuery(String field, QueryRelation queryRelation, double[][] points) {
+    return LatLonShape.newPointQuery(field, queryRelation, points);
   }
 
   /** factory method to create a new bounding box query */
@@ -227,6 +258,8 @@ public abstract class BaseLatLonShapeTestCase extends LuceneTestCase {
     // query testing
     final IndexReader reader = DirectoryReader.open(w);
 
+    // test random point queries
+    verifyRandomPointQueries(reader, shapes);
     // test random bbox queries
     verifyRandomBBoxQueries(reader, shapes);
     // test random line queries
@@ -259,6 +292,91 @@ public abstract class BaseLatLonShapeTestCase extends LuceneTestCase {
 
     if (randomBoolean()) {
       w.forceMerge(1);
+    }
+  }
+
+  protected void verifyRandomPointQueries(IndexReader reader, Object... shapes) throws Exception {
+    IndexSearcher s = newSearcher(reader);
+
+    final int iters = atLeast(75);
+
+    Bits liveDocs = MultiBits.getLiveDocs(s.getIndexReader());
+    int maxDoc = s.getIndexReader().maxDoc();
+
+    for (int iter = 0; iter < iters; ++iter) {
+      if (VERBOSE) {
+        System.out.println("\nTEST: iter=" + (iter + 1) + " of " + iters + " s=" + s);
+      }
+
+      // points
+      double[][] queryPoints = randomQueryPoints();
+      QueryRelation queryRelation = RandomPicks.randomFrom(random(), POINT_LINE_RELATIONS);
+      Query query = newPointQuery(FIELD_NAME, queryRelation, queryPoints);
+
+      if (VERBOSE) {
+        System.out.println("  query=" + query + ", relation=" + queryRelation);
+      }
+
+      final FixedBitSet hits = new FixedBitSet(maxDoc);
+      s.search(query, new SimpleCollector() {
+
+        private int docBase;
+
+        @Override
+        public ScoreMode scoreMode() {
+          return ScoreMode.COMPLETE_NO_SCORES;
+        }
+
+        @Override
+        protected void doSetNextReader(LeafReaderContext context) throws IOException {
+          docBase = context.docBase;
+        }
+
+        @Override
+        public void collect(int doc) throws IOException {
+          hits.set(docBase+doc);
+        }
+      });
+
+      boolean fail = false;
+      NumericDocValues docIDToID = MultiDocValues.getNumericValues(reader, "id");
+      for (int docID = 0; docID < maxDoc; ++docID) {
+        assertEquals(docID, docIDToID.nextDoc());
+        int id = (int) docIDToID.longValue();
+        boolean expected;
+        if (liveDocs != null && liveDocs.get(docID) == false) {
+          // document is deleted
+          expected = false;
+        } else if (shapes[id] == null) {
+          expected = false;
+        } else {
+          expected = getValidator(queryRelation).testPointQuery(queryPoints, shapes[id]);
+        }
+
+        if (hits.get(docID) != expected) {
+          StringBuilder b = new StringBuilder();
+
+          if (expected) {
+            b.append("FAIL: id=" + id + " should match but did not\n");
+          } else {
+            b.append("FAIL: id=" + id + " should not match but did\n");
+          }
+          b.append("  relation=" + queryRelation + "\n");
+          b.append("  query=" + query + " docID=" + docID + "\n");
+          b.append("  shape=" + shapes[id] + "\n");
+          b.append("  deleted?=" + (liveDocs != null && liveDocs.get(docID) == false));
+          b.append("  queryPoints=" + pointsToGeoJSON(queryPoints));
+          if (true) {
+            fail("wrong hit (first of possibly more):\n\n" + b);
+          } else {
+            System.out.println(b.toString());
+            fail = true;
+          }
+        }
+      }
+      if (fail) {
+        fail("some hits were wrong");
+      }
     }
   }
 
@@ -610,6 +728,7 @@ public abstract class BaseLatLonShapeTestCase extends LuceneTestCase {
   /** validator class used to test query results against "ground truth" */
   protected abstract class Validator {
     protected QueryRelation queryRelation = QueryRelation.INTERSECTS;
+    public abstract boolean testPointQuery(double[][] points, Object shape);
     public abstract boolean testBBoxQuery(double minLat, double maxLat, double minLon, double maxLon, Object shape);
     public abstract boolean testLineQuery(Line2D line2d, Object shape);
     public abstract boolean testPolygonQuery(Polygon2D poly2d, Object shape);

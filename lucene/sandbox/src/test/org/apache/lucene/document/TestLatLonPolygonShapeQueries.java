@@ -20,6 +20,7 @@ import java.util.List;
 
 import org.apache.lucene.document.LatLonShape.QueryRelation;
 import org.apache.lucene.geo.EdgeTree;
+import org.apache.lucene.geo.GeoEncodingUtils;
 import org.apache.lucene.geo.Line2D;
 import org.apache.lucene.geo.Polygon;
 import org.apache.lucene.geo.Polygon2D;
@@ -27,6 +28,7 @@ import org.apache.lucene.geo.Rectangle;
 import org.apache.lucene.geo.Rectangle2D;
 import org.apache.lucene.geo.Tessellator;
 import org.apache.lucene.index.PointValues.Relation;
+import org.apache.lucene.spatial.util.GeoRelationUtils;
 
 /** random bounding box and polygon query tests for random indexed {@link Polygon} types */
 public class TestLatLonPolygonShapeQueries extends BaseLatLonShapeTestCase {
@@ -65,6 +67,34 @@ public class TestLatLonPolygonShapeQueries extends BaseLatLonShapeTestCase {
   }
 
   protected class PolygonValidator extends Validator {
+    @Override
+    public boolean testPointQuery(double[][] points, Object shape) {
+      Polygon poly = (Polygon)shape;
+      int pMinLat = GeoEncodingUtils.encodeLatitude(poly.minLat);
+      int pMaxLat = GeoEncodingUtils.encodeLatitude(poly.maxLat);
+      int pMinLon = GeoEncodingUtils.encodeLongitude(poly.minLon);
+      int pMaxLon = GeoEncodingUtils.encodeLongitude(poly.maxLon);
+
+      List<Tessellator.Triangle> tessellation = Tessellator.tessellate(poly);
+      for (Tessellator.Triangle t : tessellation) {
+        int[] decoded = encodeDecodeTriangle(t.getLon(0), t.getLat(0), t.getLon(1), t.getLat(1), t.getLon(2), t.getLat(2));
+        for (int p = 0; p < points.length; ++p) {
+          int x = GeoEncodingUtils.encodeLongitude(points[p][1]);
+          int y = GeoEncodingUtils.encodeLatitude(points[p][0]);
+
+          if ((y >= pMinLat && y <= pMaxLat && x >= pMinLon && x <= pMaxLon)
+            && Tessellator.pointInTriangle(x, y, decoded[1], decoded[0], decoded[3], decoded[2], decoded[5], decoded[4])) {
+            if (queryRelation == QueryRelation.DISJOINT) {
+              return false;
+            } else {
+              return true;
+            }
+          }
+        }
+      }
+      return queryRelation == QueryRelation.DISJOINT;
+    }
+
     @Override
     public boolean testBBoxQuery(double minLat, double maxLat, double minLon, double maxLon, Object shape) {
       Polygon p = (Polygon)shape;
