@@ -66,7 +66,7 @@ public class TestLatLonPolygonShapeQueries extends BaseLatLonShapeTestCase {
     return VALIDATOR;
   }
 
-  protected class PolygonValidator extends Validator {
+  protected static class PolygonValidator extends Validator {
     @Override
     public boolean testPointQuery(double[][] points, Object shape) {
       Polygon poly = (Polygon)shape;
