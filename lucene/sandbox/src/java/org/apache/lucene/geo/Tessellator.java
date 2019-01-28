@@ -722,25 +722,25 @@ final public class Tessellator {
   }
 
   /** compute whether the given x, y point is in a triangle; uses the winding order method */
-//  public static boolean pointInTriangle (double x, double y, double ax, double ay, double bx, double by, double cx, double cy) {
-//    int a = orient(x, y, ax, ay, bx, by);
-//    int b = orient(x, y, bx, by, cx, cy);
-//    if (a == 0 || b == 0 || a < 0 == b < 0) {
-//      int c = orient(x, y, cx, cy, ax, ay);
-//      return c == 0 || (c < 0 == (b < 0 || a < 0));
-//    }
-//    return false;
-//  }
-
   public static boolean pointInTriangle (double x, double y, double ax, double ay, double bx, double by, double cx, double cy) {
-    double a = Orientation.orient2d(x, y, ax, ay, bx, by);
-    double b = Orientation.orient2d(x, y, bx, by, cx, cy);
-    if (a == 0d || b == 0d || a < 0d == b < 0d) {
-      double c = Orientation.orient2d(x, y, cx, cy, ax, ay);
-      return c == 0d || (c < 0d == (b < 0d || a < 0d));
+    int a = orient(x, y, ax, ay, bx, by);
+    int b = orient(x, y, bx, by, cx, cy);
+    if (a == 0 || b == 0 || a < 0 == b < 0) {
+      int c = orient(x, y, cx, cy, ax, ay);
+      return c == 0 || (c < 0 == (b < 0 || a < 0));
     }
     return false;
   }
+
+//  public static boolean pointInTriangle (double x, double y, double ax, double ay, double bx, double by, double cx, double cy) {
+//    double a = Orientation.orient2d(x, y, ax, ay, bx, by);
+//    double b = Orientation.orient2d(x, y, bx, by, cx, cy);
+//    if (a == 0d || b == 0d || a < 0d == b < 0d) {
+//      double c = Orientation.orient2d(x, y, cx, cy, ax, ay);
+//      return c == 0d || (c < 0d == (b < 0d || a < 0d));
+//    }
+//    return false;
+//  }
 
   /** Brute force compute if a point is in the polygon by traversing entire triangulation
    * todo: speed this up using either binary tree or prefix coding (filtering by bounding box of triangle)

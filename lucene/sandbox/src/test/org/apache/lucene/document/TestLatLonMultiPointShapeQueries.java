@@ -67,6 +67,22 @@ public class TestLatLonMultiPointShapeQueries extends BaseLatLonShapeTestCase {
 
   protected class MultiPointValidator extends Validator {
     @Override
+    public boolean testPointQuery(double[][] queryPts, Object shape) {
+      Point[] indexedPoints = (Point[])shape;
+      for (Point p : indexedPoints) {
+        boolean b = POINTVALIDATOR.testPointQuery(queryPts, indexedPoints);
+        if (b == true && queryRelation == QueryRelation.INTERSECTS) {
+          return true;
+        } else if (b == false && queryRelation == QueryRelation.DISJOINT) {
+          return false;
+        } else if (b == false && queryRelation == QueryRelation.WITHIN) {
+          return false;
+        }
+      }
+      return queryRelation != QueryRelation.INTERSECTS;
+    }
+
+    @Override
     public boolean testBBoxQuery(double minLat, double maxLat, double minLon, double maxLon, Object shape) {
       Point[] points = (Point[]) shape;
       for (Point p : points) {

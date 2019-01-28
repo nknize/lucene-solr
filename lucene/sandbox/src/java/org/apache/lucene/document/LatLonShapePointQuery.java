@@ -100,7 +100,7 @@ public class LatLonShapePointQuery extends LatLonShapeQuery {
   }
 
   @Override
-  protected boolean queryMatches(byte[] t, int[] scratchTriangle) {
+  protected boolean queryMatches(byte[] t, int[] scratchTriangle, QueryRelation queryRelation) {
     LatLonShape.decodeTriangle(t, scratchTriangle);
 
     int aX = scratchTriangle[1];
